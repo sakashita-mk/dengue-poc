@@ -165,7 +165,15 @@ layer = pdk.Layer(
     auto_highlight=True,
 )
 view_state = pdk.ViewState(latitude=CENTER_LAT, longitude=CENTER_LON, zoom=10)
-st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text":"{area}\nRisk: {risk_score}"}))
+st.pydeck_chart(
+    pdk.Deck(
+        layers=[layer],
+        initial_view_state=view_state,
+        tooltip={"text": "{area}\nRisk: {risk_score}"},
+    ),
+    height=720,   # ★ ここを追加（好みで 650〜900 くらい）
+)
+
 
 # -----------------------------------
 # Table + details
@@ -185,11 +193,3 @@ with st.expander(f"Timeseries — {focus_area}"):
 
 st.success("デモ稼働中：粒度トグル、日付、ホライズン、目標スライダーを動かして挙動を確認してください。")
 
-st.pydeck_chart(
-    pdk.Deck(
-        layers=[layer],
-        initial_view_state=view_state,
-        tooltip={"text": "{area}\nRisk: {risk_score}"},
-    ),
-    height=720,   # ★ ここを追加（好みで 650〜900 くらい）
-)
