@@ -48,22 +48,44 @@ weeks_str = [w.strftime("%Y-%m-%d") for w in weeks]
 # Controls (sidebar)
 # -----------------------------------
 with st.sidebar:
+with st.sidebar:
     st.header("Controls")
-    agg = st.radio("粒度 (Granularity)", ["adm", "grid1km"], format_func=lambda x: "行政区" if x=="adm" else "1kmグリッド")
-    base_date = st.date_input("基準日 (Week base)", value=weeks[-1].date())
-    horizon = st.select_slider("予測ホライズン (weeks)", [0,1,2], value=2)
+    agg = st.radio(
+        "粒度 (Granularity)",
+        ["adm", "grid1km"],
+        format_func=lambda x: "行政区" if x == "adm" else "1kmグリッド",
+        help="地図の集計粒度を切り替えます。行政区=市区等の境界、1kmグリッド=等間隔メッシュ"
+    )
+    base_date = st.date_input(
+        "基準日 (Week base)",
+        value=weeks[-1].date(),
+        help="予測の基準となる週の月曜日を選びます"
+    )
+    horizon = st.select_slider(
+        "予測ホライズン (weeks)", [0, 1, 2], value=2,
+        help="基準日から何週間先を表示するか（0=当週, 1=来週, 2=再来週）"
+    )
 
-    hit = st.slider("Hit率目標", 0.0, 0.9, 0.6, 0.05)
-    fa  = st.slider("過警報許容", 0.0, 0.5, 0.3, 0.05)
-    mae = st.slider("MAE改善目標", 0.0, 0.4, 0.2, 0.05)
+    hit = st.slider(
+        "Hit率目標", 0.0, 0.9, 0.6, 0.05,
+        help="Highリスク週を事前に当てられる割合の目標値（参考：60%）"
+    )
+    fa = st.slider(
+        "過警報許容", 0.0, 0.5, 0.3, 0.05,
+        help="不要なHigh警報を許容する上限（参考：30%）"
+    )
+    mae = st.slider(
+        "MAE改善目標", 0.0, 0.4, 0.2, 0.05,
+        help="季節平均などのベースラインに対して、誤差をどの程度縮めたいか"
+    )
 
-    if agg == "adm":
-        area_ids = ADM_AREAS
-    else:
-        area_ids = GRID_AREAS
-
-    default_sel = area_ids[:6]
-    sel = st.multiselect("対象エリア", options=area_ids, default=default_sel)
+    area_ids = ADM_AREAS if agg == "adm" else GRID_AREAS
+    sel = st.multiselect(
+        "対象エリア",
+        options=area_ids,
+        default=area_ids[:6],
+        help="地図と表に表示する地域を選びます（複数選択可）"
+    )
 
 # -----------------------------------
 # Prediction stub
@@ -161,44 +183,6 @@ with st.expander(f"Timeseries — {focus_area}"):
 # -----------------------------------
 # Targets panel (visual only)
 # -----------------------------------
-with st.sidebar:
-    st.header("Controls")
-    agg = st.radio(
-        "粒度 (Granularity)",
-        ["adm", "grid1km"],
-        format_func=lambda x: "行政区" if x == "adm" else "1kmグリッド",
-        help="地図の集計粒度を切り替えます。行政区=市区等の境界、1kmグリッド=等間隔メッシュ"
-    )
-    base_date = st.date_input(
-        "基準日 (Week base)",
-        value=weeks[-1].date(),
-        help="予測の基準となる週の月曜日を選びます"
-    )
-    horizon = st.select_slider(
-        "予測ホライズン (weeks)", [0, 1, 2], value=2,
-        help="基準日から何週間先を表示するか（0=当週, 1=来週, 2=再来週）"
-    )
-
-    hit = st.slider(
-        "Hit率目標", 0.0, 0.9, 0.6, 0.05,
-        help="Highリスク週を事前に当てられる割合の目標値（参考：60%）"
-    )
-    fa = st.slider(
-        "過警報許容", 0.0, 0.5, 0.3, 0.05,
-        help="不要なHigh警報を許容する上限（参考：30%）"
-    )
-    mae = st.slider(
-        "MAE改善目標", 0.0, 0.4, 0.2, 0.05,
-        help="季節平均などのベースラインに対して、誤差をどの程度縮めたいか"
-    )
-
-    area_ids = ADM_AREAS if agg == "adm" else GRID_AREAS
-    sel = st.multiselect(
-        "対象エリア",
-        options=area_ids,
-        default=area_ids[:6],
-        help="地図と表に表示する地域を選びます（複数選択可）"
-    )
 
 st.success("デモ稼働中：粒度トグル、日付、ホライズン、目標スライダーを動かして挙動を確認してください。")
 
