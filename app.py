@@ -48,7 +48,6 @@ weeks_str = [w.strftime("%Y-%m-%d") for w in weeks]
 # Controls (sidebar)
 # -----------------------------------
 with st.sidebar:
-with st.sidebar:
     st.header("Controls")
     agg = st.radio(
         "粒度 (Granularity)",
