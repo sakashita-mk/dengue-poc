@@ -42,9 +42,9 @@ for i, a in enumerate(ADM_AREAS):
 
 grid_positions = {}
 for i, g in enumerate(GRID_AREAS):
-lat = CENTER_LAT + ((i % 8) - 3.5) * 0.028
-lon = CENTER_LON + ((i // 8) - 2.5) * 0.035
-grid_positions[g] = (lat, lon)
+    lat = CENTER_LAT + ((i % 8) - 3.5) * 0.028
+    lon = CENTER_LON + ((i // 8) - 2.5) * 0.035
+    grid_positions[g] = (lat, lon)
 
 
 # Weeks list (last 78 Mondays)
