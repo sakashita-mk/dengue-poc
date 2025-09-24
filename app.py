@@ -35,9 +35,9 @@ GRID_AREAS = [f"GRID-{i:03d}" for i in range(1, 41)]
 # Stable pseudo-random positions around center
 adm_positions = {}
 for i, a in enumerate(ADM_AREAS):
-lat = CENTER_LAT + ((i % 6) - 2.5) * 0.045
-lon = CENTER_LON + ((i // 6) - 2.0) * 0.055
-adm_positions[a] = (lat, lon)
+    lat = CENTER_LAT + ((i % 6) - 2.5) * 0.045
+    lon = CENTER_LON + ((i // 6) - 2.0) * 0.055
+    adm_positions[a] = (lat, lon)
 
 
 grid_positions = {}
