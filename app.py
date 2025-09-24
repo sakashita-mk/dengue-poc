@@ -1,47 +1,95 @@
+# streamlit_app_single.py — Single-file demo (no backend needed)
+# How to run locally:
+# 1) pip install streamlit pandas numpy
+# 2) streamlit run streamlit_app_single.py
+#
+# To deploy on Streamlit Community Cloud:
+# - Push this file to a public GitHub repo
+# - Create a new app in streamlit.io, select this file as the entry point
+
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+import pydeck as pdk
 
-st.set_page_config(page_title="Infectious Disease × Satellite PoC", layout="wide")
-st.title("衛星データ × 感染症対策 PoC（デモUI）")
 
-left, right = st.columns([1, 2])
-with left:
-    st.subheader("条件設定")
-    cities = ["Manila", "Jakarta", "Bangkok", "Ho Chi Minh City"]
-    target_city = st.selectbox("対象都市", cities, index=cities.index("Manila"))
-    metrics = st.multiselect(
-        "分析指標（複数選択可）",
-        ["降雨量", "気温", "湿度", "土地被覆（緑地/水域）", "ヒートリスク", "人口密度（参考）"],
-        default=["降雨量", "気温"]
-    )
-    rain_thr = st.slider("降雨量の閾値（mm/day）", 0, 200, 50, step=5)
-    temp_thr = st.slider("気温の閾値（°C）", 0, 45, 30, step=1)
-    today = date.today()
-    start = st.date_input("開始日", today - timedelta(days=14))
-    end = st.date_input("終了日", today)
-    if start > end:
-        st.error("開始日は終了日よりも前にしてください。")
-    run = st.button("実行")
+st.set_page_config(page_title="NCR Dengue — Single-file Demo", layout="wide")
+st.title("NCR Dengue — Single-file Demo")
+st.caption("Granularity toggle • dynamic date • target sliders • map + timeseries (all stubbed)")
 
-with right:
-    st.subheader(f"結果ビュー：{target_city}")
-    if run:
-        days = pd.date_range(start=start, end=end, freq="D")
-        df = pd.DataFrame({
-            "date": days,
-            "rain_mm": np.random.gamma(shape=2.0, scale=20.0, size=len(days)),
-            "temp_c": np.random.normal(loc=30, scale=3, size=len(days)),
-        })
-        df["risk_score"] = (df["rain_mm"] > rain_thr).astype(int) + (df["temp_c"] > temp_thr).astype(int)
-        st.caption("ダミーデータ（本実装ではAPI/衛星データへ差し替え）")
-        st.line_chart(df.set_index("date")[["rain_mm", "temp_c"]])
-        st.bar_chart(df.set_index("date")[["risk_score"]])
-        st.dataframe(df)
-        st.info(
-            "実装ポイント例：\n"
-            "- GEE/EO APIから取得\n- 都市境界で集計\n- 閾値はスライダー連動\n- 介入（例：薬剤散布）推奨ロジックに接続"
-        )
-    else:
-        st.write("左の条件を設定して **実行** を押してください。")
+
+# -----------------------------------
+# Synthetic metadata (areas + grid)
+# -----------------------------------
+# NCR approximate center
+CENTER_LAT, CENTER_LON = 14.5995, 120.9842
+rng = np.random.default_rng(7)
+
+
+ADM_AREAS = [f"ADM3-{i:03d}" for i in range(1, 25)]
+GRID_AREAS = [f"GRID-{i:03d}" for i in range(1, 41)]
+
+
+# Stable pseudo-random positions around center
+adm_positions = {}
+for i, a in enumerate(ADM_AREAS):
+lat = CENTER_LAT + ((i % 6) - 2.5) * 0.045
+lon = CENTER_LON + ((i // 6) - 2.0) * 0.055
+adm_positions[a] = (lat, lon)
+
+
+grid_positions = {}
+for i, g in enumerate(GRID_AREAS):
+lat = CENTER_LAT + ((i % 8) - 3.5) * 0.028
+lon = CENTER_LON + ((i // 8) - 2.5) * 0.035
+grid_positions[g] = (lat, lon)
+
+
+# Weeks list (last 78 Mondays)
+weeks = pd.date_range(date.today() - timedelta(weeks=77), periods=78, freq="W-MON")
+weeks_str = [w.strftime("%Y-%m-%d") for w in weeks]
+
+
+# -----------------------------------
+# Controls (sidebar)
+# -----------------------------------
+with st.sidebar:
+st.header("Controls")
+agg = st.radio("粒度 (Granularity)", ["adm", "grid1km"], format_func=lambda x: "行政区" if x=="adm" else "1kmグリッド")
+base_date = st.date_input("基準日 (Week base)", value=weeks[-1].date())
+horizon = st.select_slider("予測ホライズン (weeks)", [0,1,2], value=2)
+
+
+hit = st.slider("Hit率目標", 0.0, 0.9, 0.6, 0.05)
+fa = st.slider("過警報許容", 0.0, 0.5, 0.3, 0.05)
+mae = st.slider("MAE改善目標", 0.0, 0.4, 0.2, 0.05)
+
+
+if agg == "adm":
+area_ids = ADM_AREAS
+else:
+area_ids = GRID_AREAS
+
+
+default_sel = area_ids[:6]
+sel = st.multiselect("対象エリア", options=area_ids, default=default_sel)
+
+
+# -----------------------------------
+# Prediction stub
+# -----------------------------------
+@st.cache_data(show_spinner=False)
+def predict_stub(areas, base_day: date, horizon_wk: int, agg_level: str):
+# derive week number for seasonality
+week_num = int(datetime.combine(base_day, datetime.min.time()).strftime("%U"))
+season = (np.sin(2*np.pi*week_num/52.0) + 1) / 2 # 0..1
+
+
+out = []
+for idx, a in enumerate(areas):
+# seed each area so results are stable per area
+local_rng = np.random.default_rng(abs(hash(a)) % (2**32))
+base = 40 + 40*season
+noise = local_rng.normal(0, 10)
