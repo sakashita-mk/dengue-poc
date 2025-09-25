@@ -221,76 +221,15 @@ with st.sidebar:
     fa  = st.slider("過警報許容", 0.0, 0.5, 0.3, 0.05)
     mae = st.slider("MAE改善目標", 0.0, 0.4, 0.2, 0.05)
 
-    # ✅ 表示ポリゴンと粒度を統合
-    granularity = st.radio(
-        "粒度 / 表示レイヤー",
-        ["行政区", "1kmグリッド"],
-        index=0
-    )
+    granularity = st.radio("粒度 / 表示レイヤー", ["行政区", "1kmグリッド"], index=0)
 
-    basemap = st.radio(
-        "地図スタイル（トークン不要）",
-        ["OSM標準", "CARTOライト", "CARTOダーク", "ESRI衛星"], index=2
-    )
+    # 地図スタイルの選択だけ（レイヤは後段で作る）
+    basemap = st.radio("地図スタイル（トークン不要）",
+                       ["OSM標準", "CARTOライト", "CARTOダーク", "ESRI衛星"], index=2)
 
-    # タイルURL（必ず帰属表記を入れる）
-    TILES = {
-        "OSM標準": {
-            "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            "attribution": "© OpenStreetMap contributors",
-            "minzoom": 0, "maxzoom": 19,
-        },
-        "CARTOライト": {
-            "url": "https://a.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png",
-            "attribution": "© CARTO © OpenStreetMap contributors",
-            "minzoom": 0, "maxzoom": 19,
-        },
-        "CARTOダーク": {
-            "url": "https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png",
-            "attribution": "© CARTO © OpenStreetMap contributors",
-            "minzoom": 0, "maxzoom": 19,
-        },
-        "ESRI衛星": {
-            "url": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            "attribution": "Source: Esri, Maxar, Earthstar Geographics",
-            "minzoom": 0, "maxzoom": 19,
-        },
-    }
-    
-    # 最背面にベースマップ用 TileLayer を追加
-    tile = TILES[basemap]
-    basemap_layer = pdk.Layer(
-        "TileLayer",
-        data={
-            "tilejson": "2.2.0",
-            "tiles": [tile["url"]],
-            "minzoom": tile["minzoom"],
-            "maxzoom": tile["maxzoom"],
-            "attribution": tile["attribution"],
-        },
-        opacity=1.0,
-    )
-   
-    # 既存 layers の先頭に差し込む（背景なので一番下）
-    layers = [basemap_layer] + layers
-    
-    # Deck 側は map_style を無効化
-    st.pydeck_chart(
-        pdk.Deck(
-            layers=layers,
-            initial_view_state=view_state,
-            map_style=None,   # ← CARTOの既定背景を消す
-        ),
-        height=720,
-    )
-    
-    
     show_choropleth = st.checkbox("ヒートマップ表示（面を色塗り）", value=True)
-    
-    # 「表示しない」チェックボックス（任意）
     hide_polygons = st.checkbox("ポリゴンを非表示にする", value=False)
 
-    # エリアIDは選択した粒度で切り替え
     if granularity == "行政区":
         agg = "adm"
         area_ids = ADM_AREAS
@@ -450,6 +389,42 @@ except Exception as e:
     st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
     st.exception(e)
 
+TILES = {
+    "OSM標準": {
+        "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "attribution": "© OpenStreetMap contributors",
+        "minzoom": 0, "maxzoom": 19,
+    },
+    "CARTOライト": {
+        "url": "https://a.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png",
+        "attribution": "© CARTO © OpenStreetMap contributors",
+        "minzoom": 0, "maxzoom": 19,
+    },
+    "CARTOダーク": {
+        "url": "https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png",
+        "attribution": "© CARTO © OpenStreetMap contributors",
+        "minzoom": 0, "maxzoom": 19,
+    },
+    "ESRI衛星": {
+        "url": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "attribution": "Source: Esri, Maxar, Earthstar Geographics",
+        "minzoom": 0, "maxzoom": 19,
+    },
+}
+tile = TILES[basemap]
+basemap_layer = pdk.Layer(
+    "TileLayer",
+    data={
+        "tilejson": "2.2.0",
+        "tiles": [tile["url"]],
+        "minzoom": tile["minzoom"],
+        "maxzoom": tile["maxzoom"],
+        "attribution": tile["attribution"],
+    },
+    opacity=1.0,
+)
+layers = [basemap_layer] + layers  # ← ここなら layers は既に定義済み
+
 # （任意）凡例の簡易表示
 if show_choropleth:
     st.caption("Heatmap scale: 低← 青 — 黄 — 赤 →高")
@@ -473,25 +448,3 @@ with st.sidebar:
 st.success("稼働中：粒度・日付・ホライズン・スライダーを動かして挙動を確認してください。")
 
 
-TILES = {
-    "OSM標準": {
-        "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "attribution": "© OpenStreetMap contributors",
-        "minzoom": 0, "maxzoom": 19,
-    },
-    "CARTOライト": {
-        "url": "https://a.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png",
-        "attribution": "© CARTO © OpenStreetMap contributors",
-        "minzoom": 0, "maxzoom": 19,
-    },
-    "CARTOダーク": {
-        "url": "https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png",
-        "attribution": "© CARTO © OpenStreetMap contributors",
-        "minzoom": 0, "maxzoom": 19,
-    },
-    "ESRI衛星": {
-        "url": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        "attribution": "Source: Esri, Maxar, Earthstar Geographics",
-        "minzoom": 0, "maxzoom": 19,
-    },
-}
