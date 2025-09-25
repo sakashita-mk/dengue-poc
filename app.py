@@ -433,7 +433,7 @@ st.pydeck_chart(
     pdk.Deck(
         layers=layers,
         initial_view_state=view_state,
-        map_style=style_dict[map_style]  
+        map_style=None, 
     ),
     height=720
 )
