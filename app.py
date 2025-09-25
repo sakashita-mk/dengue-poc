@@ -227,6 +227,20 @@ with st.sidebar:
         ["行政区", "1kmグリッド"],
         index=0
     )
+
+    map_style = st.radio(
+        "地図スタイル",
+        ["黒基調", "白基調", "道路地図", "衛星", "衛星+道路"],
+        index=0
+    )
+
+    style_dict = {
+    "黒基調": "mapbox://styles/mapbox/dark-v9",
+    "白基調": "mapbox://styles/mapbox/light-v9",
+    "道路地図": "mapbox://styles/mapbox/streets-v11",
+    "衛星": "mapbox://styles/mapbox/satellite-v9",
+    "衛星+道路": "mapbox://styles/mapbox/satellite-streets-v11"
+    }
     
     show_choropleth = st.checkbox("ヒートマップ表示（面を色塗り）", value=True)
     
@@ -397,7 +411,14 @@ except Exception as e:
 if show_choropleth:
     st.caption("Heatmap scale: 低← 青 — 黄 — 赤 →高")
 
-st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state), height=720)
+st.pydeck_chart(
+    pdk.Deck(
+        layers=layers,
+        initial_view_state=view_state,
+        map_style=style_dict[map_style]  
+    ),
+    height=720
+)
      
 # ---------- Targets ----------
 with st.sidebar:
