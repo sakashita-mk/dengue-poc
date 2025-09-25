@@ -411,6 +411,7 @@ TILES = {
         "minzoom": 0, "maxzoom": 19,
     },
 }
+basemap="OSM標準"
 tile = TILES[basemap]
 basemap_layer = pdk.Layer(
     "TileLayer",
