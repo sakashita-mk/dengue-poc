@@ -241,7 +241,7 @@ with st.sidebar:
         agg = "grid1km"
         area_ids = GRID_AREAS
 
-    sel = st.multiselect("対象エリア", options=area_ids, default=area_ids[:6])
+    sel = st.multiselect("対象エリア", options=area_ids, default=area_ids[:10])
 
 # ---------- Prediction stub ----------
 @st.cache_data(show_spinner=False)
