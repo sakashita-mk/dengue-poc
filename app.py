@@ -271,28 +271,27 @@ try:
     def color_by_level(level):
         # low→青っぽい / med→緑っぽい / high→赤っぽい（Hue擬似）
         return (60, 80, 80) if level == "low" else (180, 80, 80) if level == "med" else (350, 80, 80)
-        R, G, B, RAD = [], [], [], [
-            for _, r in map_df.iterrows():
-        if highlight_id and r["area"] == highlight_id:
-        R.append(255); G.append(0); B.append(255)  # マゼンタ
-        RAD.append(1800 if agg == "adm" else 1100)
-        else:
-            rr, gg, bb = color_by_level(r["risk_level"])
-            R.append(rr); G.append(gg); B.append(bb)
-            RAD.append(1200 if agg == "adm" else 700)
-            
-    map_df["fill_r"], map_df["fill_g"], map_df["fill_b"], map_df["radius"] = R, G, B, RAD
-    layers.append(pdk.Layer(
-        "ScatterplotLayer",
-        data=map_df,
-        get_position='[lon, lat]',
-        get_radius="radius",
-        radius_min_pixels=6,
-        radius_max_pixels=30,
-        get_fill_color='[fill_r, fill_g, fill_b]',
-        pickable=True,
-        auto_highlight=True,
-    ))
+        R, G, B, RAD = [], [], [], []
+        for _, r in map_df.iterrows():
+            if highlight_id and r["area"] == highlight_id:
+                R.append(255); G.append(0); B.append(255)  # マゼンタ
+                RAD.append(1800 if agg == "adm" else 1100)
+            else:
+                rr, gg, bb = color_by_level(r["risk_level"])
+                R.append(rr); G.append(gg); B.append(bb)
+                RAD.append(1200 if agg == "adm" else 700)
+        map_df["fill_r"], map_df["fill_g"], map_df["fill_b"], map_df["radius"] = R, G, B, RAD
+        layers.append(pdk.Layer(
+            "ScatterplotLayer",
+            data=map_df,
+            get_position='[lon, lat]',
+            get_radius="radius",
+            radius_min_pixels=6,
+            radius_max_pixels=30,
+            get_fill_color='[fill_r, fill_g, fill_b]',
+            pickable=True,
+            auto_highlight=True,
+        ))
 
 except Exception as e:
     st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
