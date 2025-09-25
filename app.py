@@ -304,6 +304,59 @@ def predict_stub(areas, base_day: date, horizon_wk: int, agg_level: str):
                         horizon_wk=horizon_wk, base_week=base_date.isoformat()))
     return pd.DataFrame(out)
 
+def suggest_interventions_row(risk_level: str, drivers: str) -> list[str]:
+    """
+    予測の 'risk_level' と 'drivers'（例: 'rain↑, NDVI↓' / 'LST↑, NDVI↓'）から、
+    現場アクション候補を返す簡易ルールベース。
+    """
+    suggestions = []
+    d = drivers.lower()
+
+    # 共通：リスクレベルで強度を段階化
+    if risk_level == "high":
+        suggestions += [
+            "重点区域でのソースリダクション（容器/たまり水の一斉除去）",
+            "幼虫対策（BS剤/IGRなどの殺幼虫剤：重点容器）",
+            "住民周知：屋外容器のフタ閉め/逆さ保管の徹底（多言語配布）",
+            "症状監視の強化（医療機関・学校・企業からの早期通報）"
+        ]
+    elif risk_level == "med":
+        suggestions += [
+            "定期パトロール頻度を増やす（優先ブロックに限定）",
+            "自治体・学校とクリーンアップ日程の調整",
+            "住民リマインド（SMS/掲示）"
+        ]
+    else:  # low
+        suggestions += [
+            "定常監視の継続（トラップ/通報窓口の維持）",
+            "教育・啓発の平常運用（掲示/SNS）"
+        ]
+
+    # ドライバー別の上乗せロジック
+    if "rain" in d:
+        suggestions += [
+            "降雨後48時間以内の容器・側溝の点検を追加実施",
+            "排水不良箇所の臨時対応（簡易ポンプ/溝掃除）"
+        ]
+    if "ndvi↓" in d or "vegetation" in d:
+        suggestions += [
+            "空き地/繁みの管理（草刈り・剪定・不法投棄監視）"
+        ]
+    if "lst" in d or "heat" in d:
+        suggestions += [
+            "日陰/屋内貯留水の点検（気温上昇で発生サイクル短縮）"
+        ]
+
+    # 重複除去
+    seen = set()
+    uniq = []
+    for s in suggestions:
+        if s not in seen:
+            uniq.append(s); seen.add(s)
+    return uniq
+
+
+
 @st.cache_data(show_spinner=False)
 def make_timeseries(area: str, end_day: date, weeks_back: int = 12):
     days = [end_day - timedelta(weeks=w) for w in range(weeks_back, -1, -1)]
@@ -474,6 +527,45 @@ st.pydeck_chart(
     height=720,
     key=deck_key,
 )
+
+# ---------- Intervention Hints ----------
+st.subheader("Intervention Hints（介入の示唆）")
+
+# 表に出ている対象エリア（sel）ベースで、リスク高い順に並べて提示
+_show = pred_df.sort_values("risk_score", ascending=False).reset_index(drop=True)
+
+max_areas = min(10, len(_show))  # 表示しすぎない
+for i in range(max_areas):
+    row = _show.iloc[i]
+    area_id = row["area"]
+    lvl = row["risk_level"]
+    drv = row["drivers"]
+    with st.expander(f"{i+1}. {area_id} — risk:{row['risk_score']} ({lvl}) / drivers: {drv}"):
+        for s in suggest_interventions_row(lvl, drv):
+            st.markdown(f"- {s}")
+
+# （任意）CSVで出せるように
+if st.button("介入示唆をCSVでダウンロード用に整形"):
+    csv_rows = []
+    for _, r in _show.iterrows():
+        for s in suggest_interventions_row(r["risk_level"], r["drivers"]):
+            csv_rows.append({
+                "area": r["area"],
+                "risk_score": r["risk_score"],
+                "risk_level": r["risk_level"],
+                "drivers": r["drivers"],
+                "suggestion": s,
+                "horizon_wk": r["horizon_wk"],
+                "base_week": r["base_week"],
+            })
+    if csv_rows:
+        df_sug = pd.DataFrame(csv_rows)
+        st.download_button(
+            "Download suggestions.csv",
+            df_sug.to_csv(index=False).encode("utf-8-sig"),
+            file_name="suggestions.csv",
+            mime="text/csv"
+        )
      
 # ---------- Targets ----------
 with st.sidebar:
