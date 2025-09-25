@@ -254,39 +254,39 @@ try:
     # --- ここから追加：選択エリアのポリゴンをハイライト ---
     # テーブル側 selectbox の値（既にどこかで highlight_id を作っている前提）
     # 例: highlight_id = st.session_state.get("highlight_area", "")
-    if highlight_id:
-        if agg == "adm":
-            # 市区名で抽出→統合→描画
-            name_col = [c for c in adm2_in_ncr.columns if "name" in c.lower()][0]
-            h = adm2_in_ncr[adm2_in_ncr[name_col].astype(str) == highlight_id]
-            if not h.empty:
-                h = h.dissolve(by=name_col)
-                h = h.explode(index_parts=False).reset_index(drop=True)
-                h["coordinates"] = h.geometry.apply(to_polygon_coords)
-                layers.append(pdk.Layer(
-                    "PolygonLayer",
-                    data=h,
-                    get_polygon="coordinates",
-                    get_fill_color=[255, 0, 255, 50],   # うっすらマゼンタ塗り
-                    stroked=True,
-                    get_line_color=[255, 255, 255],    # 太めの白枠
-                    line_width_min_pixels=3,
-                    pickable=False,
-                ))
-        elif agg == "grid1km":
-            h = grid_cache[grid_cache["grid_id"] == highlight_id].copy()
-            if not h.empty:
-                h["coordinates"] = h.geometry.apply(to_polygon_coords)
-                layers.append(pdk.Layer(
-                    "PolygonLayer",
-                    data=h,
-                    get_polygon="coordinates",
-                    get_fill_color=[255, 0, 255, 50],
-                    stroked=True,
-                    get_line_color=[255, 255, 255],
-                    line_width_min_pixels=3,
-                    pickable=False,
-                ))
+        if highlight_id:
+            if agg == "adm":
+                # 市区名で抽出→統合→描画
+                name_col = [c for c in adm2_in_ncr.columns if "name" in c.lower()][0]
+                h = adm2_in_ncr[adm2_in_ncr[name_col].astype(str) == highlight_id]
+                if not h.empty:
+                    h = h.dissolve(by=name_col)
+                    h = h.explode(index_parts=False).reset_index(drop=True)
+                    h["coordinates"] = h.geometry.apply(to_polygon_coords)
+                    layers.append(pdk.Layer(
+                        "PolygonLayer",
+                        data=h,
+                        get_polygon="coordinates",
+                        get_fill_color=[255, 0, 255, 50],   # うっすらマゼンタ塗り
+                        stroked=True,
+                        get_line_color=[255, 255, 255],    # 太めの白枠
+                        line_width_min_pixels=3,
+                        pickable=False,
+                    ))
+            elif agg == "grid1km":
+                h = grid_cache[grid_cache["grid_id"] == highlight_id].copy()
+                if not h.empty:
+                    h["coordinates"] = h.geometry.apply(to_polygon_coords)
+                    layers.append(pdk.Layer(
+                        "PolygonLayer",
+                        data=h,
+                        get_polygon="coordinates",
+                        get_fill_color=[255, 0, 255, 50],
+                        stroked=True,
+                        get_line_color=[255, 255, 255],
+                        line_width_min_pixels=3,
+                        pickable=False,
+                    ))
     
     # 点レイヤ（粒度に関係なく表示）
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
