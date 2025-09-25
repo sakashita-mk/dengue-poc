@@ -223,13 +223,10 @@ with st.sidebar:
 
     granularity = st.radio("粒度 / 表示レイヤー", ["行政区", "1kmグリッド"], index=0)
 
-    # 地図スタイルの選択だけ（レイヤは後段で作る）
-    #basemap = st.radio("地図スタイル（トークン不要）",
-    #                   ["OSM標準", "CARTOライト", "CARTOダーク", "ESRI衛星"], index=2)
-
     show_choropleth = st.checkbox("ヒートマップ表示（面を色塗り）", value=True)
     hide_polygons = st.checkbox("ポリゴンを非表示にする", value=False)
 
+    # 粒度に応じて候補リストを決定
     if granularity == "行政区":
         agg = "adm"
         area_ids = ADM_AREAS
@@ -237,7 +234,39 @@ with st.sidebar:
         agg = "grid1km"
         area_ids = GRID_AREAS
 
-    sel = st.multiselect("対象エリア", options=area_ids, default=area_ids[:10])
+    # ▼▼▼ ここから：一括選択 UI を追加 ▼▼▼
+    # multiselect に key を付与して、値は session_state で管理
+    default_areas = area_ids[:10]
+    sel = st.multiselect(
+        "対象エリア",
+        options=area_ids,
+        default=default_areas if "areas_sel" not in st.session_state else st.session_state["areas_sel"],
+        key="areas_sel"
+    )
+
+    # 行ボタン（全選択／全解除）
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("全選択", use_container_width=True):
+            st.session_state["areas_sel"] = area_ids
+            st.rerun()
+    with col_b:
+        if st.button("全解除", use_container_width=True):
+            st.session_state["areas_sel"] = []
+            st.rerun()
+
+    # 上位N（score降順）を一括選択
+    topn = st.selectbox("上位N（score降順）", [10, 25, 50, 100, 200, 500], index=2)
+    if st.button("上位Nを反映", use_container_width=True):
+        # いまの基準日・ホライズン・粒度で全域をスコアリングして並べ替え
+        preds_all = predict_stub(area_ids, base_date, horizon, agg)
+        top_ids = (
+            preds_all.sort_values(["risk_score", "area"], ascending=[False, True])["area"]
+            .head(int(topn)).tolist()
+        )
+        st.session_state["areas_sel"] = top_ids
+        st.rerun()
+    # ▲▲▲ ここまで追加 ▲▲▲
 
 # ---------- Prediction stub ----------
 @st.cache_data(show_spinner=False)
