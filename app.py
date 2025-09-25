@@ -177,6 +177,31 @@ GRID_AREAS = grid_cache["grid_id"].tolist()
 grid_pts = grid_cache.geometry.representative_point()
 grid_positions = {gid: (pt.y, pt.x) for gid, pt in zip(GRID_AREAS, grid_pts)}
 
+
+# --- 空間相関ノイズを作るユーティリティ（RBFガウスカーネル） ---
+def make_spatial_field(pos_dict, length_km=8.0, seed=123):
+    ids  = list(pos_dict.keys())
+    lats = np.array([pos_dict[i][0] for i in ids])
+    lons = np.array([pos_dict[i][1] for i in ids])
+    lat0 = float(lats.mean())
+    # 緯度経度→km近似（NCR程度のスケールならOK）
+    x = (lons - lons.mean()) * np.cos(np.deg2rad(lat0)) * 111.0
+    y = (lats - lats.mean()) * 111.0
+    X = np.vstack([x, y]).T
+    # 距離の二乗行列
+    d2 = ((X[:, None, :] - X[None, :, :])**2).sum(axis=2)
+    K = np.exp(-d2 / (2 * (length_km**2)))         # RBFカーネル
+    rng = np.random.default_rng(seed)
+    z = rng.normal(size=len(ids))
+    field = K @ z                                   # 相関ノイズ
+    field = (field - field.mean()) / (field.std() + 1e-6)  # 標準化
+    field = field * 10.0                            # だいたい ±10点の振幅
+    return {i: float(v) for i, v in zip(ids, field)}
+
+# ADM/GRID 用に一度だけ前計算（スケールは適宜調整）
+SPATIAL_NOISE_ADM  = make_spatial_field(adm_positions,  length_km=10.0, seed=42)
+SPATIAL_NOISE_GRID = make_spatial_field(grid_positions, length_km=5.0,  seed=42)
+
 weeks = pd.date_range(date.today() - timedelta(weeks=77), periods=78, freq="W-MON")
 
 # ---------- Sidebar ----------
@@ -219,13 +244,21 @@ def predict_stub(areas, base_day: date, horizon_wk: int, agg_level: str):
     for a in areas:
         rng = np.random.default_rng(abs(hash(a)) % (2**32))
         base = 40 + 40*season
-        noise = rng.normal(0, 10)
-        score = float(np.clip(base + noise + 10*horizon_wk, 0, 100))
+
+        # ★ 空間相関ノイズを加える（地域で“まとまり”が出る）
+        spatial = (SPATIAL_NOISE_ADM.get(a, 0.0) if agg_level == "adm"
+                   else SPATIAL_NOISE_GRID.get(a, 0.0))
+        # 個別の微小ノイズ（粒度合わせ）
+        noise_iid = rng.normal(0, 3)
+
+        score = float(np.clip(base + spatial + noise_iid + 10*horizon_wk, 0, 100))
         level = "low" if score < 33 else ("med" if score < 66 else "high")
-        drivers = "rain↑, NDVI↓" if season>0.5 else "LST↑, NDVI↓"
-        if agg_level=="adm": lat, lon = adm_positions[a]
-        else: lat, lon = grid_positions[a]
-        out.append(dict(area=a, risk_score=round(score,1), risk_level=level,
+        drivers = "rain↑, NDVI↓" if season > 0.5 else "LST↑, NDVI↓"
+        if agg_level == "adm":
+            lat, lon = adm_positions[a]
+        else:
+            lat, lon = grid_positions[a]
+        out.append(dict(area=a, risk_score=round(score, 1), risk_level=level,
                         drivers=drivers, lat=lat, lon=lon,
                         horizon_wk=horizon_wk, base_week=base_date.isoformat()))
     return pd.DataFrame(out)
