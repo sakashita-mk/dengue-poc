@@ -2,6 +2,7 @@
 # Run:
 #   pip install streamlit pandas numpy pydeck geopandas shapely pyproj requests
 #   streamlit run app.py
+
 import os
 import streamlit as st
 import pandas as pd
@@ -11,6 +12,17 @@ import pydeck as pdk
 import geopandas as gpd
 from shapely.geometry import box
 import requests
+
+def _hash_gdf(gdf: gpd.GeoDataFrame):
+    # 形状のバウンディングボックスを丸めてハッシュのキーに
+    # （厳密にしたければ unary_union.wkb でもOK）
+    import numpy as np
+    return tuple(np.round(gdf.total_bounds, 6))
+
+@st.cache_data(
+    show_spinner=False,
+    hash_funcs={gpd.GeoDataFrame: _hash_gdf}  # ← これがポイント
+
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="NCR Dengue — PoC Demo", layout="wide")
