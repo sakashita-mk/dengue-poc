@@ -6,3 +6,4 @@ geopandas >= 0.14
 shapely >= 2.0
 pyproj
 requests
+tabulate>=0.9
