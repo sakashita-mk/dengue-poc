@@ -264,7 +264,16 @@ except Exception as e:
     st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
     st.exception(e)
 
-st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state), height=720)
+tooltip = {"text": "{area}\nscore: {risk_score}\nlevel: {risk_level}"}
+
+st.pydeck_chart(
+    pdk.Deck(
+        layers=layers,
+        initial_view_state=view_state,
+        tooltip=tooltip          # ← ここを追加
+    ),
+    height=720
+)
 
 # ---------- Table ----------
 st.subheader("Predictions")
