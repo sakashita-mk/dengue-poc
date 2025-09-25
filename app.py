@@ -420,6 +420,7 @@ basemap_layer = pdk.Layer(
         "minzoom": tile["minzoom"],
         "maxzoom": tile["maxzoom"],
         "attribution": tile["attribution"],
+        "name": basemap,
     },
     opacity=1.0,
 )
