@@ -4,6 +4,9 @@
 #   streamlit run app.py
 
 import os
+os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+os.environ["STREAMLIT_CONFIG_DIR"] = "/tmp/.streamlit"
+os.makedirs("/tmp/.streamlit", exist_ok=True)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -199,7 +202,7 @@ def make_spatial_field(pos_dict, length_km=8.0, seed=123):
     return {i: float(v) for i, v in zip(ids, field)}
 
 # ADM/GRID 用に一度だけ前計算（スケールは適宜調整）
-USE_SPATIAL_NOISE = False  # ← まずは安全にOFF（後でTrueにすれば復活）
+USE_SPATIAL_NOISE = True  # ← まずは安全にOFF（後でTrueにすれば復活）
 
 if USE_SPATIAL_NOISE:
     SPATIAL_NOISE_ADM  = make_spatial_field(adm_positions,  length_km=10.0, seed=42, n_centers=32)
@@ -251,9 +254,9 @@ def predict_stub(areas, base_day: date, horizon_wk: int, agg_level: str):
         base = 40 + 40*season
 
         # ★ 空間相関ノイズを加える（地域で“まとまり”が出る）
-        spatial = 0.0
-        #spatial = (SPATIAL_NOISE_ADM.get(a, 0.0) if agg_level == "adm"
-        #           else SPATIAL_NOISE_GRID.get(a, 0.0))
+        #spatial = 0.0
+        spatial = (SPATIAL_NOISE_ADM.get(a, 0.0) if agg_level == "adm"
+                   else SPATIAL_NOISE_GRID.get(a, 0.0))
         # 個別の微小ノイズ（粒度合わせ）
         noise_iid = rng.normal(0, 3)
 
@@ -286,9 +289,6 @@ if not sel:
     st.stop()
 
 pred_df = predict_stub(sel, base_date, horizon, agg)
-
-areas_for_map = ADM_AREAS if agg == "adm" else GRID_AREAS
-pred_map = predict_stub(areas_for_map, base_date, horizon, agg)[["area", "risk_score"]]
 
 # 面塗り用：全エリアのスコア（テーブルは sel のままでOK）
 areas_for_map = ADM_AREAS if agg=="adm" else GRID_AREAS
