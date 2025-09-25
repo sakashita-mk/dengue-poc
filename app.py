@@ -414,6 +414,7 @@ TILES = {
 tile = TILES[basemap]
 basemap_layer = pdk.Layer(
     "TileLayer",
+    id=f"basemap-{basemap}",
     data={
         "tilejson": "2.2.0",
         "tiles": [tile["url"]],
