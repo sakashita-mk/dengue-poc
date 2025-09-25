@@ -227,6 +227,16 @@ if not sel:
 
 pred_df = predict_stub(sel, base_date, horizon, agg)
 
+# ---------- Table & Highlight control (before Map) ----------
+st.subheader("Predictions")
+table = pred_df[["area","risk_score","risk_level","drivers","horizon_wk","base_week"]]
+left, right = st.columns([4,1])
+with left:
+    st.dataframe(table, use_container_width=True, hide_index=True)
+with right:
+    highlight = st.selectbox("ハイライト", options=["(なし)"] + table["area"].tolist(), key="hl")
+highlight_id = "" if highlight == "(なし)" else highlight
+
 # ---------- Map ----------
 st.subheader("Risk Map")
 view_state = pdk.ViewState(latitude=CENTER_LAT, longitude=CENTER_LON, zoom=10)
@@ -267,31 +277,37 @@ try:
     
     # 点レイヤ（粒度に関係なく表示）
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
-    highlight_id = st.session_state.get("highlight_area", "")
-    def color_by_level(level):
-        # low→青っぽい / med→緑っぽい / high→赤っぽい（Hue擬似）
-        return (60, 80, 80) if level == "low" else (180, 80, 80) if level == "med" else (350, 80, 80)
-        R, G, B, RAD = [], [], [], []
-        for _, r in map_df.iterrows():
-            if highlight_id and r["area"] == highlight_id:
-                R.append(255); G.append(0); B.append(255)  # マゼンタ
-                RAD.append(1800 if agg == "adm" else 1100)
-            else:
-                rr, gg, bb = color_by_level(r["risk_level"])
-                R.append(rr); G.append(gg); B.append(bb)
-                RAD.append(1200 if agg == "adm" else 700)
-        map_df["fill_r"], map_df["fill_g"], map_df["fill_b"], map_df["radius"] = R, G, B, RAD
-        layers.append(pdk.Layer(
-            "ScatterplotLayer",
-            data=map_df,
-            get_position='[lon, lat]',
-            get_radius="radius",
-            radius_min_pixels=6,
-            radius_max_pixels=30,
-            get_fill_color='[fill_r, fill_g, fill_b]',
-            pickable=True,
-            auto_highlight=True,
-        ))
+    # ベース色（見やすい固定RGB）
+    BASE_COLORS = {
+        "low":  (64, 160, 255),   # 青
+        "med":  (255, 180, 64),   # オレンジ
+        "high": (255, 64, 64),    # 赤
+    }
+
+    # ベクトル化で色・半径・アルファを作成
+    is_hl = (map_df["area"] == highlight_id) & (highlight_id != "")
+    map_df["fill_r"] = np.where(is_hl, 255, map_df["risk_level"].map(lambda lv: BASE_COLORS[lv][0]))
+    map_df["fill_g"] = np.where(is_hl,   0, map_df["risk_level"].map(lambda lv: BASE_COLORS[lv][1]))
+    map_df["fill_b"] = np.where(is_hl, 255, map_df["risk_level"].map(lambda lv: BASE_COLORS[lv][2]))
+    map_df["fill_a"] = np.where(is_hl, 255, 180)  # 透過も強めに差をつける
+
+    map_df["radius"] = np.where(
+        is_hl,
+        1800 if agg == "adm" else 1100,     # ← ハイライトはデカく
+        1200 if agg == "adm" else 700,
+    )
+
+    layers.append(pdk.Layer(
+        "ScatterplotLayer",
+        data=map_df,
+        get_position='[lon, lat]',
+        get_radius="radius",
+        radius_min_pixels=6,
+        radius_max_pixels=30,
+        get_fill_color='[fill_r, fill_g, fill_b, fill_a]',  # ← RGBAで渡す
+        pickable=True,
+        auto_highlight=True,
+    ))
 
 except Exception as e:
     st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
