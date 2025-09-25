@@ -270,7 +270,7 @@ with st.sidebar:
         },
         opacity=1.0,
     )
-    
+   
     # 既存 layers の先頭に差し込む（背景なので一番下）
     layers = [basemap_layer] + layers
     
@@ -283,6 +283,7 @@ with st.sidebar:
         ),
         height=720,
     )
+    
     
     show_choropleth = st.checkbox("ヒートマップ表示（面を色塗り）", value=True)
     
@@ -470,3 +471,27 @@ with st.sidebar:
     st.metric("MAE改善 目標", f"{int(mae*100)}%")
 
 st.success("稼働中：粒度・日付・ホライズン・スライダーを動かして挙動を確認してください。")
+
+
+TILES = {
+    "OSM標準": {
+        "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "attribution": "© OpenStreetMap contributors",
+        "minzoom": 0, "maxzoom": 19,
+    },
+    "CARTOライト": {
+        "url": "https://a.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png",
+        "attribution": "© CARTO © OpenStreetMap contributors",
+        "minzoom": 0, "maxzoom": 19,
+    },
+    "CARTOダーク": {
+        "url": "https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png",
+        "attribution": "© CARTO © OpenStreetMap contributors",
+        "minzoom": 0, "maxzoom": 19,
+    },
+    "ESRI衛星": {
+        "url": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "attribution": "Source: Esri, Maxar, Earthstar Geographics",
+        "minzoom": 0, "maxzoom": 19,
+    },
+}
