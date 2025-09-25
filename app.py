@@ -269,7 +269,7 @@ else:
 
 st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state), height=720)
 
-# ---------- highlight ----------
+# ---------- Table ----------
 st.subheader("Predictions")
 table = pred_df[["area","risk_score","risk_level","drivers","horizon_wk","base_week"]]
 
@@ -282,16 +282,7 @@ with right:
         st.session_state["highlight_area"] = highlight
     else:
         st.session_state["highlight_area"] = ""
-# ---------- Table ----------
-st.subheader("Predictions")
-st.dataframe(pred_df[["area","risk_score","risk_level","drivers","horizon_wk","base_week"]],
-             use_container_width=True)
-
-focus_area = sel[0]
-with st.expander(f"Timeseries — {focus_area}"):
-    ts = make_timeseries(focus_area, base_date)
-    st.line_chart(ts.set_index("date"))
-
+        
 # ---------- Targets ----------
 with st.sidebar:
     st.markdown("---")
