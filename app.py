@@ -224,8 +224,8 @@ with st.sidebar:
     granularity = st.radio("粒度 / 表示レイヤー", ["行政区", "1kmグリッド"], index=0)
 
     # 地図スタイルの選択だけ（レイヤは後段で作る）
-    basemap = st.radio("地図スタイル（トークン不要）",
-                       ["OSM標準", "CARTOライト", "CARTOダーク", "ESRI衛星"], index=2)
+    #basemap = st.radio("地図スタイル（トークン不要）",
+    #                   ["OSM標準", "CARTOライト", "CARTOダーク", "ESRI衛星"], index=2)
 
     show_choropleth = st.checkbox("ヒートマップ表示（面を色塗り）", value=True)
     hide_polygons = st.checkbox("ポリゴンを非表示にする", value=False)
