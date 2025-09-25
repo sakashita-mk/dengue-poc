@@ -19,10 +19,6 @@ def _hash_gdf(gdf: gpd.GeoDataFrame):
     import numpy as np
     return tuple(np.round(gdf.total_bounds, 6))
 
-@st.cache_data(
-    show_spinner=False,
-    hash_funcs={gpd.GeoDataFrame: _hash_gdf}  # ← これがポイント
-)
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="NCR Dengue — PoC Demo", layout="wide")
@@ -98,7 +94,11 @@ def to_polygon_coords(g):
         return [list(map(list, g.exterior.coords))]
     return []
 
-@st.cache_data(show_spinner=False)
+
+@st.cache_data(
+    show_spinner=False,
+    hash_funcs={gpd.GeoDataFrame: _hash_gdf}  # ← これがポイント
+)
 def make_grid_over_ncr(ncr_gdf):
     """NCR(4326)→UTM(32651) に投影して 1km 格子を生成。戻す際に座標 & 幾何を整形。"""
     ncr_utm = ncr_gdf.to_crs(32651).copy()
