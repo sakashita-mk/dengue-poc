@@ -19,6 +19,13 @@ def _hash_gdf(gdf: gpd.GeoDataFrame):
     import numpy as np
     return tuple(np.round(gdf.total_bounds, 6))
 
+# 追加：幾何簡略化ユーティリティ
+def simplify_gdf(gdf: gpd.GeoDataFrame, tol_m: float = 50) -> gpd.GeoDataFrame:
+    g = gdf.to_crs(32651).copy()           # NCRはUTM51NでOK
+    g["geometry"] = g.geometry.simplify(tol_m, preserve_topology=True)
+    g = g.to_crs(4326)
+    g["geometry"] = g.buffer(0)            # 念のため修復
+    return g
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="NCR Dengue — PoC Demo", layout="wide")
@@ -87,6 +94,9 @@ def load_geoboundaries_ncr():
     adm2_in_ncr = gpd.clip(adm2, ncr[["geometry"]])
     adm2_in_ncr = adm2_in_ncr.explode(index_parts=False).reset_index(drop=True)
 
+    ncr = simplify_gdf(ncr, 50)
+    adm2_in_ncr = simplify_gdf(adm2_in_ncr, 50)
+    
     return ncr, adm2_in_ncr
 
 def to_polygon_coords(g):
@@ -115,6 +125,7 @@ def make_grid_over_ncr(ncr_gdf):
                 cells.append(geom)
 
     grid = gpd.GeoDataFrame(geometry=cells, crs=32651).to_crs(4326)
+    grid = simplify_gdf(grid, 50)
     grid["geometry"] = grid.buffer(0)
     grid = grid.explode(index_parts=False).reset_index(drop=True)
     grid["coordinates"] = grid.geometry.apply(
