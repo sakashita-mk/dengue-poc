@@ -308,6 +308,8 @@ st.pydeck_chart(
     height=720
 )
 
+st.caption(f"ADM={len(ADM_AREAS)} areas, GRID={len(GRID_AREAS)} cells")
+
 # ---------- Table ----------
 st.subheader("Predictions")
 table = pred_df[["area","risk_score","risk_level","drivers","horizon_wk","base_week"]]
