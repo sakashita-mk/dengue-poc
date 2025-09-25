@@ -155,16 +155,24 @@ with st.sidebar:
     fa  = st.slider("過警報許容", 0.0, 0.5, 0.3, 0.05)
     mae = st.slider("MAE改善目標", 0.0, 0.4, 0.2, 0.05)
 
-    # 表示モード切替
-    poly_mode = st.radio(
-        "表示ポリゴン",
-        ["行政区(ADM)", "1kmグリッド", "表示しない"],
+    # ✅ 表示ポリゴンと粒度を統合
+    granularity = st.radio(
+        "粒度 / 表示レイヤー",
+        ["行政区", "1kmグリッド"],
         index=0
     )
 
-    agg = st.radio("粒度 (Granularity)", ["adm", "grid1km"],
-                   format_func=lambda x: "行政区" if x=="adm" else "1kmグリッド")
-    area_ids = ADM_AREAS if agg=="adm" else GRID_AREAS
+    # 「表示しない」チェックボックス（任意）
+    hide_polygons = st.checkbox("ポリゴンを非表示にする", value=False)
+
+    # エリアIDは選択した粒度で切り替え
+    if granularity == "行政区":
+        agg = "adm"
+        area_ids = ADM_AREAS
+    else:
+        agg = "grid1km"
+        area_ids = GRID_AREAS
+
     sel = st.multiselect("対象エリア", options=area_ids, default=area_ids[:6])
 
 # ---------- Prediction stub ----------
@@ -209,32 +217,36 @@ pred_df = predict_stub(sel, base_date, horizon, agg)
 st.subheader("Risk Map")
 view_state = pdk.ViewState(latitude=CENTER_LAT, longitude=CENTER_LON, zoom=10)
 layers = []
+
 try:
     ncr_gdf, adm2_in_ncr = load_geoboundaries_ncr()
 
-    if poly_mode == "行政区(ADM)":
-        ncr_gdf["coordinates"] = ncr_gdf.geometry.apply(to_polygon_coords)
-        layers.append(pdk.Layer(
-            "PolygonLayer", data=ncr_gdf, get_polygon="coordinates",
-            get_fill_color=[200,30,0,25], stroked=True, get_line_color=[200,30,0],
-            line_width_min_pixels=1, pickable=True
-        ))
-        if not adm2_in_ncr.empty:
-            adm2_in_ncr["coordinates"] = adm2_in_ncr.geometry.apply(to_polygon_coords)
+    if not hide_polygons:   # ← サイドバーでチェックされていなければ描画
+        if agg == "adm":
+            # 行政区ポリゴン
+            ncr_gdf["coordinates"] = ncr_gdf.geometry.apply(to_polygon_coords)
             layers.append(pdk.Layer(
-                "PolygonLayer", data=adm2_in_ncr, get_polygon="coordinates",
-                get_fill_color=[0,120,200,12], stroked=True, get_line_color=[0,120,200],
+                "PolygonLayer", data=ncr_gdf, get_polygon="coordinates",
+                get_fill_color=[200,30,0,25], stroked=True, get_line_color=[200,30,0],
                 line_width_min_pixels=1, pickable=True
             ))
+            if not adm2_in_ncr.empty:
+                adm2_in_ncr["coordinates"] = adm2_in_ncr.geometry.apply(to_polygon_coords)
+                layers.append(pdk.Layer(
+                    "PolygonLayer", data=adm2_in_ncr, get_polygon="coordinates",
+                    get_fill_color=[0,120,200,12], stroked=True, get_line_color=[0,120,200],
+                    line_width_min_pixels=1, pickable=True
+                ))
 
-    elif poly_mode == "1kmグリッド":
-        grid = make_grid_over_ncr(ncr_gdf)
-        grid["coordinates"] = grid.geometry.apply(to_polygon_coords)
-        layers.append(pdk.Layer(
-            "PolygonLayer", data=grid, get_polygon="coordinates",
-            get_fill_color=[255,255,0,8], stroked=True, get_line_color=[255,255,0],
-            line_width_min_pixels=1
-        ))
+        elif agg == "grid1km":
+            # グリッドポリゴン
+            grid = make_grid_over_ncr(ncr_gdf)
+            grid["coordinates"] = grid.geometry.apply(to_polygon_coords)
+            layers.append(pdk.Layer(
+                "PolygonLayer", data=grid, get_polygon="coordinates",
+                get_fill_color=[255,255,0,8], stroked=True, get_line_color=[255,255,0],
+                line_width_min_pixels=1
+            ))
 
     # 点レイヤ（粒度に関係なく表示）
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
