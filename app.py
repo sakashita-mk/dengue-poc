@@ -199,8 +199,13 @@ def make_spatial_field(pos_dict, length_km=8.0, seed=123):
     return {i: float(v) for i, v in zip(ids, field)}
 
 # ADM/GRID 用に一度だけ前計算（スケールは適宜調整）
-SPATIAL_NOISE_ADM  = make_spatial_field(adm_positions,  length_km=10.0, seed=42)
-SPATIAL_NOISE_GRID = make_spatial_field(grid_positions, length_km=5.0,  seed=42)
+USE_SPATIAL_NOISE = False  # ← まずは安全にOFF（後でTrueにすれば復活）
+
+if USE_SPATIAL_NOISE:
+    SPATIAL_NOISE_ADM  = make_spatial_field(adm_positions,  length_km=10.0, seed=42, n_centers=32)
+    SPATIAL_NOISE_GRID = make_spatial_field(grid_positions, length_km=6.0,  seed=42, n_centers=64)
+else:
+    SPATIAL_NOISE_ADM, SPATIAL_NOISE_GRID = {}, {}
 
 weeks = pd.date_range(date.today() - timedelta(weeks=77), periods=78, freq="W-MON")
 
