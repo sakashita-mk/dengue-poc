@@ -298,6 +298,13 @@ pred_map = predict_stub(areas_for_map, base_date, horizon, agg)[["area","risk_sc
 st.subheader("Predictions")
 table = pred_df[["area","risk_score","risk_level","drivers","horizon_wk","base_week"]]
 left, right = st.columns([4,1])
+
+# 10行ぶんの高さを確保（行が10未満でも見やすい高さ）
+ROWS_TO_SHOW = 10
+ROW_H = 34   # 1行あたりの目安高さ（環境で±数px差あり）
+HEADER_H = 38
+height = HEADER_H + ROW_H * max(ROWS_TO_SHOW, 1)
+
 with left:
     st.dataframe(table, use_container_width=True, hide_index=True)
 with right:
