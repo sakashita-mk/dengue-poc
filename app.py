@@ -100,9 +100,14 @@ def load_geoboundaries_ncr():
     return ncr, adm2_in_ncr
 
 def to_polygon_coords(g):
+    if g.is_empty:
+        return []
     if g.geom_type == "Polygon":
         return [list(map(list, g.exterior.coords))]
-    return []
+    elif g.geom_type == "MultiPolygon":
+        return [list(map(list, poly.exterior.coords)) for poly in g.geoms]
+    else:
+        return []
 
 
 @st.cache_data(
@@ -246,34 +251,42 @@ try:
     ncr_gdf, adm2_in_ncr = load_geoboundaries_ncr()
 
     if not hide_polygons:   # ← サイドバーでチェックされていなければ描画
+    # --- ここから追加：選択エリアのポリゴンをハイライト ---
+    # テーブル側 selectbox の値（既にどこかで highlight_id を作っている前提）
+    # 例: highlight_id = st.session_state.get("highlight_area", "")
+    if highlight_id:
         if agg == "adm":
-            # 行政区ポリゴン
-            ncr_gdf["coordinates"] = ncr_gdf.geometry.apply(to_polygon_coords)
-            layers.append(pdk.Layer(
-                "PolygonLayer", data=ncr_gdf, get_polygon="coordinates",
-                get_fill_color=[200,30,0,25], stroked=True, get_line_color=[200,30,0],
-                line_width_min_pixels=1, pickable=True
-            ))
-            if not adm2_in_ncr.empty:
-                adm2_in_ncr["coordinates"] = adm2_in_ncr.geometry.apply(to_polygon_coords)
+            # 市区名で抽出→統合→描画
+            name_col = [c for c in adm2_in_ncr.columns if "name" in c.lower()][0]
+            h = adm2_in_ncr[adm2_in_ncr[name_col].astype(str) == highlight_id]
+            if not h.empty:
+                h = h.dissolve(by=name_col)
+                h = h.explode(index_parts=False).reset_index(drop=True)
+                h["coordinates"] = h.geometry.apply(to_polygon_coords)
                 layers.append(pdk.Layer(
-                    "PolygonLayer", data=adm2_in_ncr, get_polygon="coordinates",
-                    get_fill_color=[0,120,200,12], stroked=True, get_line_color=[0,120,200],
-                    line_width_min_pixels=1, pickable=True
+                    "PolygonLayer",
+                    data=h,
+                    get_polygon="coordinates",
+                    get_fill_color=[255, 0, 255, 50],   # うっすらマゼンタ塗り
+                    stroked=True,
+                    get_line_color=[255, 255, 255],    # 太めの白枠
+                    line_width_min_pixels=3,
+                    pickable=False,
                 ))
         elif agg == "grid1km":
-            grid = grid_cache.copy()
-            grid["coordinates"] = grid.geometry.apply(to_polygon_coords)
-            layers.append(pdk.Layer(
-                "PolygonLayer",
-                data=grid,
-                get_polygon="coordinates",
-                get_fill_color=[255, 255, 0, 8],
-                stroked=True,
-                get_line_color=[255, 255, 0],
-                line_width_min_pixels=1,
-            ))
-
+            h = grid_cache[grid_cache["grid_id"] == highlight_id].copy()
+            if not h.empty:
+                h["coordinates"] = h.geometry.apply(to_polygon_coords)
+                layers.append(pdk.Layer(
+                    "PolygonLayer",
+                    data=h,
+                    get_polygon="coordinates",
+                    get_fill_color=[255, 0, 255, 50],
+                    stroked=True,
+                    get_line_color=[255, 255, 255],
+                    line_width_min_pixels=3,
+                    pickable=False,
+                ))
     
     # 点レイヤ（粒度に関係なく表示）
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
