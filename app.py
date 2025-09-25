@@ -22,6 +22,11 @@ CENTER_LAT, CENTER_LON = 14.5995, 120.9842
 # ---------- Helper: geoBoundaries ----------
 @st.cache_data(show_spinner=False)
 def load_geoboundaries_ncr():
+    """
+    geoBoundaries の PHL ADM1/ADM2 を取得して、
+    NCR(=National Capital Region/Metropolitan Manila/NCR) と
+    その内側の ADM2 を返す（幾何修復＋clipで安定化）。
+    """
     adm1_meta = requests.get(
         "https://www.geoboundaries.org/api/current/gbOpen/PHL/ADM1/", timeout=30
     ).json()
@@ -34,12 +39,31 @@ def load_geoboundaries_ncr():
     adm1 = gpd.read_file(adm1_url).to_crs(4326)
     adm2 = gpd.read_file(adm2_url).to_crs(4326)
 
-    name_col_1 = "shapeName" if "shapeName" in adm1.columns else next(c for c in adm1.columns if "NAME" in c.upper())
-    ncr = adm1[adm1[name_col_1].str.contains("National Capital Region", case=False, na=False)]
+    # 名称カラム推定（geoBoundaries は shapeName が基本）
+    name_cols = [c for c in adm1.columns if "name" in c.lower()] or list(adm1.columns)
+    name_col_1 = name_cols[0]
+
+    # NCR 名称ゆらぎに対応
+    ncr_keywords = ["national capital region", "metropolitan manila", "ncr"]
+    mask = adm1[name_col_1].astype(str).str.lower().apply(
+        lambda s: any(k in s for k in ncr_keywords)
+    )
+    ncr = adm1[mask].copy()
+    if ncr.empty:
+        raise ValueError("NCR を ADM1 から特定できませんでした。")
+
+    # 幾何修復（invalid 対策）＋ explode
+    ncr["geometry"] = ncr.buffer(0)
     ncr = ncr.explode(index_parts=False).reset_index(drop=True)
 
-    adm2_in_ncr = gpd.overlay(adm2, ncr[["geometry"]], how="intersection")
+    # ADM2 側も修復
+    adm2 = adm2.copy()
+    adm2["geometry"] = adm2.buffer(0)
+
+    # clip の方が overlay より壊れにくい
+    adm2_in_ncr = gpd.clip(adm2, ncr[["geometry"]])
     adm2_in_ncr = adm2_in_ncr.explode(index_parts=False).reset_index(drop=True)
+
     return ncr, adm2_in_ncr
 
 def to_polygon_coords(g):
@@ -49,19 +73,26 @@ def to_polygon_coords(g):
 
 @st.cache_data(show_spinner=False)
 def make_grid_over_ncr(ncr_gdf):
-    ncr_utm = ncr_gdf.to_crs(32651)
+    """NCR(4326)→UTM(32651) に投影して 1km 格子を生成。戻す際に座標 & 幾何を整形。"""
+    ncr_utm = ncr_gdf.to_crs(32651).copy()
+    ncr_utm["geometry"] = ncr_utm.buffer(0)
     minx, miny, maxx, maxy = ncr_utm.total_bounds
-    cell = 1000
+
+    cell = 1000  # 1km
     union = ncr_utm.unary_union
     cells = []
     for x in np.arange(minx, maxx, cell):
         for y in np.arange(miny, maxy, cell):
-            geom = box(x, y, x+cell, y+cell)
+            geom = box(x, y, x + cell, y + cell)
             if union.intersects(geom):
                 cells.append(geom)
+
     grid = gpd.GeoDataFrame(geometry=cells, crs=32651).to_crs(4326)
+    grid["geometry"] = grid.buffer(0)
     grid = grid.explode(index_parts=False).reset_index(drop=True)
-    grid["coordinates"] = grid.geometry.apply(to_polygon_coords)
+    grid["coordinates"] = grid.geometry.apply(
+        lambda g: [list(map(list, g.exterior.coords))] if g.geom_type == "Polygon" else []
+    )
     return grid
 
 # ---------- Synthetic fallback positions ----------
@@ -137,30 +168,46 @@ layers = []
 if show_polygons:
     try:
         ncr_gdf, adm2_in_ncr = load_geoboundaries_ncr()
-        ncr_gdf["coordinates"] = ncr_gdf.geometry.apply(to_polygon_coords)
-        poly_layer = pdk.Layer("PolygonLayer", data=ncr_gdf,
-                               get_polygon="coordinates",
-                               get_fill_color=[200,30,0,25],
-                               stroked=True, get_line_color=[200,30,0],
-                               line_width_min_pixels=1, pickable=True)
+        ncr_gdf["coordinates"] = ncr_gdf.geometry.apply(
+            lambda g: [list(map(list, g.exterior.coords))] if g.geom_type == "Polygon" else []
+        )
+        poly_layer = pdk.Layer(
+            "PolygonLayer",
+            data=ncr_gdf,
+            get_polygon="coordinates",
+            get_fill_color=[200, 30, 0, 25],
+            stroked=True, get_line_color=[200, 30, 0],
+            line_width_min_pixels=1, pickable=True,
+        )
         layers.append(poly_layer)
+
         grid = make_grid_over_ncr(ncr_gdf)
-        grid_layer = pdk.Layer("PolygonLayer", data=grid,
-                               get_polygon="coordinates",
-                               get_fill_color=[255,255,0,8],
-                               stroked=True, get_line_color=[255,255,0],
-                               line_width_min_pixels=1)
+        grid_layer = pdk.Layer(
+            "PolygonLayer",
+            data=grid,
+            get_polygon="coordinates",
+            get_fill_color=[255, 255, 0, 8],
+            stroked=True, get_line_color=[255, 255, 0],
+            line_width_min_pixels=1,
+        )
         layers.append(grid_layer)
-        if adm2_in_ncr is not None:
-            adm2_in_ncr["coordinates"] = adm2_in_ncr.geometry.apply(to_polygon_coords)
-            city_layer = pdk.Layer("PolygonLayer", data=adm2_in_ncr,
-                                   get_polygon="coordinates",
-                                   get_fill_color=[0,120,200,12],
-                                   stroked=True, get_line_color=[0,120,200],
-                                   line_width_min_pixels=1, pickable=True)
+
+        if adm2_in_ncr is not None and not adm2_in_ncr.empty:
+            adm2_in_ncr["coordinates"] = adm2_in_ncr.geometry.apply(
+                lambda g: [list(map(list, g.exterior.coords))] if g.geom_type == "Polygon" else []
+            )
+            city_layer = pdk.Layer(
+                "PolygonLayer",
+                data=adm2_in_ncr,
+                get_polygon="coordinates",
+                get_fill_color=[0, 120, 200, 12],
+                stroked=True, get_line_color=[0, 120, 200],
+                line_width_min_pixels=1, pickable=True,
+            )
             layers.append(city_layer)
     except Exception as e:
-        st.error(f"ポリゴン描画に失敗しました: {e}")
+        st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
+        st.exception(e)  # ← 何が起きているか可視化
 else:
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
     color_expr = ["risk_level == 'low' ? 60 : risk_level == 'med' ? 180 : 350","80","80"]
