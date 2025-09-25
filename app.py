@@ -566,7 +566,79 @@ if st.button("介入示唆をCSVでダウンロード用に整形"):
             file_name="suggestions.csv",
             mime="text/csv"
         )
-     
+
+# ---------- LLM Intervention Hints ----------
+st.markdown("---")
+st.caption("LLM連携（任意）：鍵が設定されている場合のみ実行されます。")
+
+use_llm = st.checkbox("LLM で介入提案を要約・具体化する（任意）", value=False,
+                      help="社内/外部のLLMエンドポイントを噛ませて、行動計画をテキストで整形します。")
+if use_llm:
+    topk = st.slider("対象上位K（リスク順）", 1, min(10, len(_show)), 5)
+    base_prompt = st.text_area(
+        "プロンプト（編集可）",
+        value=(
+            "あなたはデング熱の現場オペレーションのプランナーです。"
+            "以下の地区候補について、今週の具体的な行動計画（Who/When/Where/What/How Much）を、"
+            "過警報リスクを考慮しながら優先度順に日本語で提案してください。"
+            "住民負担/コスト/雨天対応の観点も簡潔に入れてください。"
+        ),
+        help="LLMに渡す指示文。業務文体・粒度はここで調整。"
+    )
+
+    # 入力の整形
+    subset = _show.head(topk)[["area", "risk_score", "risk_level", "drivers"]]
+    llm_input = subset.to_markdown(index=False)
+
+    # 優先：任意の社内エンドポイント
+    llm_endpoint = st.secrets.get("LLM_ENDPOINT", "")
+    openai_key = st.secrets.get("OPENAI_API_KEY", "")
+
+    llm_output = None
+    try:
+        if llm_endpoint:
+            import requests as _rq
+            payload = {"prompt": base_prompt + "\n\n" + llm_input}
+            r = _rq.post(llm_endpoint, json=payload, timeout=60)
+            r.raise_for_status()
+            llm_output = r.json().get("text") or r.text
+        elif openai_key:
+            # 例：OpenAI互換エンドポイント（SDKに依存しない書き方）
+            import requests as _rq
+            headers = {
+                "Authorization": f"Bearer {openai_key}",
+                "Content-Type": "application/json",
+            }
+            # モデル名やAPIパスは環境に合わせて調整してください
+            api_url = "https://api.openai.com/v1/chat/completions"
+            data = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": "You are a public health operations planner."},
+                    {"role": "user", "content": base_prompt + "\n\n" + llm_input}
+                ],
+                "temperature": 0.4,
+            }
+            resp = _rq.post(api_url, headers=headers, json=data, timeout=60)
+            resp.raise_for_status()
+            jj = resp.json()
+            llm_output = jj["choices"][0]["message"]["content"]
+    except Exception as e:
+        st.warning(f"LLM連携に失敗しました：{e}")
+
+    if llm_output:
+        st.markdown("#### LLM案（ドラフト）")
+        st.write(llm_output)
+        st.download_button(
+            "Download plan.txt",
+            llm_output.encode("utf-8"),
+            file_name="intervention_plan.txt",
+            mime="text/plain"
+        )
+    else:
+        st.info("鍵が未設定、または応答が取得できませんでした。`st.secrets` に `LLM_ENDPOINT` か `OPENAI_API_KEY` を設定してください。")
+
+
 # ---------- Targets ----------
 with st.sidebar:
     st.markdown("---")
