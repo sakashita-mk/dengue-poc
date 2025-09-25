@@ -2,7 +2,7 @@
 # Run:
 #   pip install streamlit pandas numpy pydeck geopandas shapely pyproj requests
 #   streamlit run app.py
-
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
