@@ -414,15 +414,10 @@ TILES = {
 tile = TILES[basemap]
 basemap_layer = pdk.Layer(
     "TileLayer",
-    id=f"basemap-{basemap}",
-    data={
-        "tilejson": "2.2.0",
-        "tiles": [tile["url"]],
-        "minzoom": tile["minzoom"],
-        "maxzoom": tile["maxzoom"],
-        "attribution": tile["attribution"],
-        "name": basemap,
-    },
+    id="basemap",                  # 固定でOK
+    data=tile["url"],              # ← 文字列URLを直接
+    min_zoom=tile["minzoom"],      # ← pydeck は snake_case を camelCase に
+    max_zoom=tile["maxzoom"],
     opacity=1.0,
 )
 layers = [basemap_layer] + layers  # ← ここなら layers は既に定義済み
