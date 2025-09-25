@@ -588,8 +588,13 @@ if use_llm:
 
     # 入力の整形
     subset = _show.head(topk)[["area", "risk_score", "risk_level", "drivers"]]
-    llm_input = subset.to_markdown(index=False)
-
+    # 入力の整形（tabulate が無ければ CSV にフォールバック）
+    try:
+        import tabulate  # noqa: F401  # 存在チェックだけ
+        llm_input = subset.to_markdown(index=False)
+    except Exception:
+        llm_input = subset.to_csv(index=False)
+    
     # 優先：任意の社内エンドポイント
     llm_endpoint = st.secrets.get("LLM_ENDPOINT", "")
     openai_key = st.secrets.get("OPENAI_API_KEY", "")
