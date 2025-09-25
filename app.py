@@ -429,13 +429,16 @@ layers = [basemap_layer] + layers  # ← ここなら layers は既に定義済�
 if show_choropleth:
     st.caption("Heatmap scale: 低← 青 — 黄 — 赤 →高")
 
+deck_key = f"deck-{basemap}-{agg}-{int(show_choropleth)}-{int(hide_polygons)}-{highlight_id}"
+
 st.pydeck_chart(
     pdk.Deck(
         layers=layers,
         initial_view_state=view_state,
         map_style=None, 
     ),
-    height=720
+    height=720,
+    key=deck_key,
 )
      
 # ---------- Targets ----------
