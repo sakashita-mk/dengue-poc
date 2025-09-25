@@ -22,19 +22,17 @@ CENTER_LAT, CENTER_LON = 14.5995, 120.9842
 # ---------- Helper: geoBoundaries ----------
 @st.cache_data(show_spinner=False)
 def load_geoboundaries_ncr():
-    """
-    geoBoundaries の PHL ADM1/ADM2 を取得して、
-    NCR(=National Capital Region/Metropolitan Manila/NCR) と
-    その内側の ADM2 を返す（幾何修復＋clipで安定化）。
-    """
+    # ADM1/ADM2 メタデータを取得
     adm1_meta = requests.get(
         "https://www.geoboundaries.org/api/current/gbOpen/PHL/ADM1/", timeout=30
     ).json()
     adm2_meta = requests.get(
         "https://www.geoboundaries.org/api/current/gbOpen/PHL/ADM2/", timeout=30
     ).json()
-    adm1_url = adm1_meta[0]["gjDownloadURL"]
-    adm2_url = adm2_meta[0]["gjDownloadURL"]
+
+    # 辞書なので直接キー参照
+    adm1_url = adm1_meta["gjDownloadURL"]
+    adm2_url = adm2_meta["gjDownloadURL"]
 
     adm1 = gpd.read_file(adm1_url).to_crs(4326)
     adm2 = gpd.read_file(adm2_url).to_crs(4326)
