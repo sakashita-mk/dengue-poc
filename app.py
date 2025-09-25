@@ -238,34 +238,31 @@ try:
 
     # 点レイヤ（粒度に関係なく表示）
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
-    # 選択行ハイライト対応（次節）
+    highlight_id = st.session_state.get("highlight_area", "")
+
+    # 目立つマゼンタ（RGB = 255,0,255）＋サイズ拡大で強調
     color_expr = [
-        f"(properties.area == '{st.session_state.get('highlight_area','')}')"
-        " ? 0 : (properties.risk_level == 'low' ? 60 : "
-        "(properties.risk_level == 'med' ? 180 : 350))",
-        "(properties.area == '" + st.session_state.get('highlight_area','') + "') ? 255 : 80",
-        "(properties.area == '" + st.session_state.get('highlight_area','') + "') ? 0 : 80"
+        f"(properties.area == '{highlight_id}') ? 255 : "
+        "(properties.risk_level == 'low' ? 60 : (properties.risk_level == 'med' ? 180 : 350))",
+        f"(properties.area == '{highlight_id}') ? 0 : 80",
+        f"(properties.area == '{highlight_id}') ? 255 : 80",
     ]
+    radius_expr = f"(properties.area == '{highlight_id}') ? " \
+                  f"{1800 if agg=='adm' else 1100} : {1200 if agg=='adm' else 700}"
+
     layers.append(pdk.Layer(
-        "ScatterplotLayer", data=map_df,
+        "ScatterplotLayer",
+        data=map_df,
         get_position='[lon, lat]',
-        get_radius=1200 if agg=="adm" else 700,
+        get_radius=radius_expr,            # ← ハイライトだけ半径アップ
         radius_min_pixels=6, radius_max_pixels=30,
-        get_fill_color=color_expr, pickable=True, auto_highlight=True
+        get_fill_color=color_expr,         # ← マゼンタで強調
+        pickable=True, auto_highlight=True
     ))
 
 except Exception as e:
     st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
     st.exception(e)
-else:
-    map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
-    color_expr = ["risk_level == 'low' ? 60 : risk_level == 'med' ? 180 : 350","80","80"]
-    scatter = pdk.Layer("ScatterplotLayer", data=map_df,
-                        get_position='[lon, lat]',
-                        get_radius=1000 if agg=="adm" else 600,
-                        radius_min_pixels=6, radius_max_pixels=30,
-                        get_fill_color=color_expr, pickable=True, auto_highlight=True)
-    layers.append(scatter)
 
 st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state), height=720)
 
