@@ -149,14 +149,21 @@ weeks = pd.date_range(date.today() - timedelta(weeks=77), periods=78, freq="W-MO
 # ---------- Sidebar ----------
 with st.sidebar:
     st.header("Controls")
-    show_polygons = st.checkbox("行政区/グリッドをポリゴンで表示", value=True)
-    agg = st.radio("粒度 (Granularity)", ["adm", "grid1km"],
-                   format_func=lambda x: "行政区" if x=="adm" else "1kmグリッド")
     base_date = st.date_input("基準日 (Week base)", value=weeks[-1].date())
     horizon = st.select_slider("予測ホライズン (weeks)", [0,1,2], value=2)
     hit = st.slider("Hit率目標", 0.0, 0.9, 0.6, 0.05)
     fa  = st.slider("過警報許容", 0.0, 0.5, 0.3, 0.05)
     mae = st.slider("MAE改善目標", 0.0, 0.4, 0.2, 0.05)
+
+    # 表示モード切替
+    poly_mode = st.radio(
+        "表示ポリゴン",
+        ["行政区(ADM)", "1kmグリッド", "表示しない"],
+        index=0
+    )
+
+    agg = st.radio("粒度 (Granularity)", ["adm", "grid1km"],
+                   format_func=lambda x: "行政区" if x=="adm" else "1kmグリッド")
     area_ids = ADM_AREAS if agg=="adm" else GRID_AREAS
     sel = st.multiselect("対象エリア", options=area_ids, default=area_ids[:6])
 
@@ -202,50 +209,54 @@ pred_df = predict_stub(sel, base_date, horizon, agg)
 st.subheader("Risk Map")
 view_state = pdk.ViewState(latitude=CENTER_LAT, longitude=CENTER_LON, zoom=10)
 layers = []
+try:
+    ncr_gdf, adm2_in_ncr = load_geoboundaries_ncr()
 
-if show_polygons:
-    try:
-        ncr_gdf, adm2_in_ncr = load_geoboundaries_ncr()
-        ncr_gdf["coordinates"] = ncr_gdf.geometry.apply(
-            lambda g: [list(map(list, g.exterior.coords))] if g.geom_type == "Polygon" else []
-        )
-        poly_layer = pdk.Layer(
-            "PolygonLayer",
-            data=ncr_gdf,
-            get_polygon="coordinates",
-            get_fill_color=[200, 30, 0, 25],
-            stroked=True, get_line_color=[200, 30, 0],
-            line_width_min_pixels=1, pickable=True,
-        )
-        layers.append(poly_layer)
+    if poly_mode == "行政区(ADM)":
+        ncr_gdf["coordinates"] = ncr_gdf.geometry.apply(to_polygon_coords)
+        layers.append(pdk.Layer(
+            "PolygonLayer", data=ncr_gdf, get_polygon="coordinates",
+            get_fill_color=[200,30,0,25], stroked=True, get_line_color=[200,30,0],
+            line_width_min_pixels=1, pickable=True
+        ))
+        if not adm2_in_ncr.empty:
+            adm2_in_ncr["coordinates"] = adm2_in_ncr.geometry.apply(to_polygon_coords)
+            layers.append(pdk.Layer(
+                "PolygonLayer", data=adm2_in_ncr, get_polygon="coordinates",
+                get_fill_color=[0,120,200,12], stroked=True, get_line_color=[0,120,200],
+                line_width_min_pixels=1, pickable=True
+            ))
 
+    elif poly_mode == "1kmグリッド":
         grid = make_grid_over_ncr(ncr_gdf)
-        grid_layer = pdk.Layer(
-            "PolygonLayer",
-            data=grid,
-            get_polygon="coordinates",
-            get_fill_color=[255, 255, 0, 8],
-            stroked=True, get_line_color=[255, 255, 0],
-            line_width_min_pixels=1,
-        )
-        layers.append(grid_layer)
+        grid["coordinates"] = grid.geometry.apply(to_polygon_coords)
+        layers.append(pdk.Layer(
+            "PolygonLayer", data=grid, get_polygon="coordinates",
+            get_fill_color=[255,255,0,8], stroked=True, get_line_color=[255,255,0],
+            line_width_min_pixels=1
+        ))
 
-        if adm2_in_ncr is not None and not adm2_in_ncr.empty:
-            adm2_in_ncr["coordinates"] = adm2_in_ncr.geometry.apply(
-                lambda g: [list(map(list, g.exterior.coords))] if g.geom_type == "Polygon" else []
-            )
-            city_layer = pdk.Layer(
-                "PolygonLayer",
-                data=adm2_in_ncr,
-                get_polygon="coordinates",
-                get_fill_color=[0, 120, 200, 12],
-                stroked=True, get_line_color=[0, 120, 200],
-                line_width_min_pixels=1, pickable=True,
-            )
-            layers.append(city_layer)
-    except Exception as e:
-        st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
-        st.exception(e)  # ← 何が起きているか可視化
+    # 点レイヤ（粒度に関係なく表示）
+    map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
+    # 選択行ハイライト対応（次節）
+    color_expr = [
+        f"(properties.area == '{st.session_state.get('highlight_area','')}')"
+        " ? 0 : (properties.risk_level == 'low' ? 60 : "
+        "(properties.risk_level == 'med' ? 180 : 350))",
+        "(properties.area == '" + st.session_state.get('highlight_area','') + "') ? 255 : 80",
+        "(properties.area == '" + st.session_state.get('highlight_area','') + "') ? 0 : 80"
+    ]
+    layers.append(pdk.Layer(
+        "ScatterplotLayer", data=map_df,
+        get_position='[lon, lat]',
+        get_radius=1200 if agg=="adm" else 700,
+        radius_min_pixels=6, radius_max_pixels=30,
+        get_fill_color=color_expr, pickable=True, auto_highlight=True
+    ))
+
+except Exception as e:
+    st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
+    st.exception(e)
 else:
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
     color_expr = ["risk_level == 'low' ? 60 : risk_level == 'med' ? 180 : 350","80","80"]
