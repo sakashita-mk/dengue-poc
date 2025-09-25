@@ -134,42 +134,31 @@ def make_grid_over_ncr(ncr_gdf):
     return grid
 
 # ---------- Real areas & positions built from actual geoms ----------
-# ここはユーティリティ群（load_geoboundaries_ncr, make_grid_over_ncr, simplify_gdf 等）の
-# 定義が終わった“後”、weeks を作る“前”に置いてください。
 
-# 1) 境界を一度だけ読み込み（@st.cache_data でキャッシュされる）
+# 1) 一度だけ境界を取得（cacheされる）
 ncr_gdf_cache, adm2_in_ncr_cache = load_geoboundaries_ncr()
 
-# 2) ADM（市区）ID＝名称を抽出
+# 2) ADM（市区）ID＝名称（実データ）
 ADM_NAME_COL = [c for c in adm2_in_ncr_cache.columns if "name" in c.lower()][0]
-ADM_AREAS = (
-    adm2_in_ncr_cache[ADM_NAME_COL].astype(str).dropna().unique().tolist()
-)
-ADM_AREAS.sort()
 
-# 3) ADM の点表示用（各市区の重心：UTMでcentroid→WGS84へ戻す）
-_adm_utm = adm2_in_ncr_cache.to_crs(32651).copy()
-_adm_utm["centroid"] = _adm_utm.geometry.centroid
-_adm_cent_wgs = _adm_utm.to_crs(4326)["centroid"]
-adm_positions = {}
-for name, pt in zip(adm2_in_ncr_cache[ADM_NAME_COL].astype(str), _adm_cent_wgs):
-    # 同名が複数（マルチポリゴン）でも最初の1つを採用
-    adm_positions.setdefault(name, (pt.y, pt.x))  # (lat, lon)
+# 同名を統合（マルチをまとめる）→ 代表点を安全に取得
+adm_diss = adm2_in_ncr_cache[[ADM_NAME_COL, "geometry"]].dissolve(by=ADM_NAME_COL)
+adm_diss = adm_diss[~adm_diss.geometry.is_empty].to_crs(4326).copy()
+adm_pts  = adm_diss.geometry.representative_point()  # 内部に必ず落ちる点
 
-# 4) 1kmグリッドを作成（既存関数を使用）
+ADM_AREAS = adm_diss.index.astype(str).tolist()
+adm_positions = {name: (pt.y, pt.x) for name, pt in zip(ADM_AREAS, adm_pts)}
+
+# 3) 1kmグリッド（実件数ぶんIDを振る）
 grid_cache = make_grid_over_ncr(ncr_gdf_cache).reset_index(drop=True)
-
-# IDを付与（GRID-001, GRID-002, ...）
+grid_cache = grid_cache[~grid_cache.geometry.is_empty].copy()
 grid_cache["grid_id"] = [f"GRID-{i+1:03d}" for i in range(len(grid_cache))]
 GRID_AREAS = grid_cache["grid_id"].tolist()
 
-# グリッドの点表示用（セルの重心）
-_grid_utm = grid_cache.to_crs(32651).copy()
-_grid_utm["centroid"] = _grid_utm.geometry.centroid
-_grid_cent_wgs = _grid_utm.to_crs(4326)["centroid"]
-grid_positions = {
-    gid: (pt.y, pt.x) for gid, pt in zip(GRID_AREAS, _grid_cent_wgs)
-}
+grid_pts = grid_cache.geometry.representative_point()
+grid_positions = {gid: (pt.y, pt.x) for gid, pt in zip(GRID_AREAS, grid_pts)}
+
+weeks = pd.date_range(date.today() - timedelta(weeks=77), periods=78, freq="W-MON")
 
 # ---------- Sidebar ----------
 with st.sidebar:
@@ -262,40 +251,47 @@ try:
                     get_fill_color=[0,120,200,12], stroked=True, get_line_color=[0,120,200],
                     line_width_min_pixels=1, pickable=True
                 ))
-
-        elif agg == "grid1km":  # ← 連動UIにしているならこの条件
-            grid = grid_cache              # ← ここを make_grid_over_ncr(ncr_gdf) から置き換え
+        elif agg == "grid1km":
+            grid = grid_cache.copy()
             grid["coordinates"] = grid.geometry.apply(to_polygon_coords)
             layers.append(pdk.Layer(
-                "PolygonLayer", data=grid,
+                "PolygonLayer",
+                data=grid,
                 get_polygon="coordinates",
-                get_fill_color=[255,255,0,8],
-                stroked=True, get_line_color=[255,255,0],
-                line_width_min_pixels=1
-    ))
+                get_fill_color=[255, 255, 0, 8],
+                stroked=True,
+                get_line_color=[255, 255, 0],
+                line_width_min_pixels=1,
+            ))
+
     
     # 点レイヤ（粒度に関係なく表示）
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
     highlight_id = st.session_state.get("highlight_area", "")
-
-    # 目立つマゼンタ（RGB = 255,0,255）＋サイズ拡大で強調
-    color_expr = [
-        f"(properties.area == '{highlight_id}') ? 255 : "
-        "(properties.risk_level == 'low' ? 60 : (properties.risk_level == 'med' ? 180 : 350))",
-        f"(properties.area == '{highlight_id}') ? 0 : 80",
-        f"(properties.area == '{highlight_id}') ? 255 : 80",
-    ]
-    radius_expr = f"(properties.area == '{highlight_id}') ? " \
-                  f"{1800 if agg=='adm' else 1100} : {1200 if agg=='adm' else 700}"
-
+    def color_by_level(level):
+        # low→青っぽい / med→緑っぽい / high→赤っぽい（Hue擬似）
+        return (60, 80, 80) if level == "low" else (180, 80, 80) if level == "med" else (350, 80, 80)
+        R, G, B, RAD = [], [], [], [
+            for _, r in map_df.iterrows():
+        if highlight_id and r["area"] == highlight_id:
+        R.append(255); G.append(0); B.append(255)  # マゼンタ
+        RAD.append(1800 if agg == "adm" else 1100)
+        else:
+            rr, gg, bb = color_by_level(r["risk_level"])
+            R.append(rr); G.append(gg); B.append(bb)
+            RAD.append(1200 if agg == "adm" else 700)
+            
+    map_df["fill_r"], map_df["fill_g"], map_df["fill_b"], map_df["radius"] = R, G, B, RAD
     layers.append(pdk.Layer(
         "ScatterplotLayer",
         data=map_df,
         get_position='[lon, lat]',
-        get_radius=radius_expr,            # ← ハイライトだけ半径アップ
-        radius_min_pixels=6, radius_max_pixels=30,
-        get_fill_color=color_expr,         # ← マゼンタで強調
-        pickable=True, auto_highlight=True
+        get_radius="radius",
+        radius_min_pixels=6,
+        radius_max_pixels=30,
+        get_fill_color='[fill_r, fill_g, fill_b]',
+        pickable=True,
+        auto_highlight=True,
     ))
 
 except Exception as e:
