@@ -133,18 +133,43 @@ def make_grid_over_ncr(ncr_gdf):
     )
     return grid
 
-# ---------- Synthetic fallback positions ----------
-ADM_AREAS = [f"ADM3-{i:03d}" for i in range(1, 25)]
-GRID_AREAS = [f"GRID-{i:03d}" for i in range(1, 41)]
-adm_positions, grid_positions = {}, {}
-for i, a in enumerate(ADM_AREAS):
-    adm_positions[a] = (CENTER_LAT + ((i % 6) - 2.5) * 0.045,
-                        CENTER_LON + ((i // 6) - 2.0) * 0.055)
-for i, g in enumerate(GRID_AREAS):
-    grid_positions[g] = (CENTER_LAT + ((i % 8) - 3.5) * 0.028,
-                         CENTER_LON + ((i // 8) - 2.5) * 0.035)
+# ---------- Real areas & positions built from actual geoms ----------
+# ここはユーティリティ群（load_geoboundaries_ncr, make_grid_over_ncr, simplify_gdf 等）の
+# 定義が終わった“後”、weeks を作る“前”に置いてください。
 
-weeks = pd.date_range(date.today() - timedelta(weeks=77), periods=78, freq="W-MON")
+# 1) 境界を一度だけ読み込み（@st.cache_data でキャッシュされる）
+ncr_gdf_cache, adm2_in_ncr_cache = load_geoboundaries_ncr()
+
+# 2) ADM（市区）ID＝名称を抽出
+ADM_NAME_COL = [c for c in adm2_in_ncr_cache.columns if "name" in c.lower()][0]
+ADM_AREAS = (
+    adm2_in_ncr_cache[ADM_NAME_COL].astype(str).dropna().unique().tolist()
+)
+ADM_AREAS.sort()
+
+# 3) ADM の点表示用（各市区の重心：UTMでcentroid→WGS84へ戻す）
+_adm_utm = adm2_in_ncr_cache.to_crs(32651).copy()
+_adm_utm["centroid"] = _adm_utm.geometry.centroid
+_adm_cent_wgs = _adm_utm.to_crs(4326)["centroid"]
+adm_positions = {}
+for name, pt in zip(adm2_in_ncr_cache[ADM_NAME_COL].astype(str), _adm_cent_wgs):
+    # 同名が複数（マルチポリゴン）でも最初の1つを採用
+    adm_positions.setdefault(name, (pt.y, pt.x))  # (lat, lon)
+
+# 4) 1kmグリッドを作成（既存関数を使用）
+grid_cache = make_grid_over_ncr(ncr_gdf_cache).reset_index(drop=True)
+
+# IDを付与（GRID-001, GRID-002, ...）
+grid_cache["grid_id"] = [f"GRID-{i+1:03d}" for i in range(len(grid_cache))]
+GRID_AREAS = grid_cache["grid_id"].tolist()
+
+# グリッドの点表示用（セルの重心）
+_grid_utm = grid_cache.to_crs(32651).copy()
+_grid_utm["centroid"] = _grid_utm.geometry.centroid
+_grid_cent_wgs = _grid_utm.to_crs(4326)["centroid"]
+grid_positions = {
+    gid: (pt.y, pt.x) for gid, pt in zip(GRID_AREAS, _grid_cent_wgs)
+}
 
 # ---------- Sidebar ----------
 with st.sidebar:
@@ -238,16 +263,17 @@ try:
                     line_width_min_pixels=1, pickable=True
                 ))
 
-        elif agg == "grid1km":
-            # グリッドポリゴン
-            grid = make_grid_over_ncr(ncr_gdf)
+        elif agg == "grid1km":  # ← 連動UIにしているならこの条件
+            grid = grid_cache              # ← ここを make_grid_over_ncr(ncr_gdf) から置き換え
             grid["coordinates"] = grid.geometry.apply(to_polygon_coords)
             layers.append(pdk.Layer(
-                "PolygonLayer", data=grid, get_polygon="coordinates",
-                get_fill_color=[255,255,0,8], stroked=True, get_line_color=[255,255,0],
+                "PolygonLayer", data=grid,
+                get_polygon="coordinates",
+                get_fill_color=[255,255,0,8],
+                stroked=True, get_line_color=[255,255,0],
                 line_width_min_pixels=1
-            ))
-
+    ))
+    
     # 点レイヤ（粒度に関係なく表示）
     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
     highlight_id = st.session_state.get("highlight_area", "")
