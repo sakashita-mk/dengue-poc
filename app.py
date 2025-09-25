@@ -215,18 +215,52 @@ weeks = pd.date_range(date.today() - timedelta(weeks=77), periods=78, freq="W-MO
 # ---------- Sidebar ----------
 with st.sidebar:
     st.header("Controls")
-    base_date = st.date_input("基準日 (Week base)", value=weeks[-1].date())
-    horizon = st.select_slider("予測ホライズン (weeks)", [0,1,2], value=2)
-    hit = st.slider("Hit率目標", 0.0, 0.9, 0.6, 0.05)
-    fa  = st.slider("過警報許容", 0.0, 0.5, 0.3, 0.05)
-    mae = st.slider("MAE改善目標", 0.0, 0.4, 0.2, 0.05)
+    base_date = st.date_input(
+        "基準日 (Week base)",
+        value=weeks[-1].date(),
+        help="この週を基準に予測を行います。週番号ベース（W-MON）で処理します。"
+    )
+    horizon = st.select_slider(
+        "予測ホライズン (weeks)",
+        [0, 1, 2],
+        value=2,
+        help="何週間先までのリスクを表示するか。0＝今週、1＝来週、2＝再来週。"
+    )
+    hit = st.slider(
+        "Hit率目標",
+        0.0, 0.9, 0.6, 0.05,
+        help="高リスク予測が実際の高発生をどれだけ当てられたか（感度のイメージ）。PoC用の目標値。"
+    )
+    fa  = st.slider(
+        "過警報許容",
+        0.0, 0.5, 0.3, 0.05,
+        help="高リスクと予測したのに実際は低〜中だった割合（偽陽性）。現場負荷とのトレードオフ。"
+    )
+    mae = st.slider(
+        "MAE改善目標",
+        0.0, 0.4, 0.2, 0.05,
+        help="ベースラインに対する平均絶対誤差(MAE)の改善率目標。数値が大きいほど精度改善を要求。"
+    )
 
-    granularity = st.radio("粒度 / 表示レイヤー", ["行政区", "1kmグリッド"], index=0)
+    granularity = st.radio(
+        "粒度 / 表示レイヤー",
+        ["行政区", "1kmグリッド"],
+        index=0,
+        help="可視化と集計の単位。行政区＝市区町村相当、1kmグリッド＝空間均等メッシュ。"
+    )
 
-    show_choropleth = st.checkbox("ヒートマップ表示（面を色塗り）", value=True)
-    hide_polygons = st.checkbox("ポリゴンを非表示にする", value=False)
+    show_choropleth = st.checkbox(
+        "ヒートマップ表示（面を色塗り）",
+        value=True,
+        help="オンにするとポリゴン全面をリスクスコアで着色。オフで輪郭のみ表示。"
+    )
+    hide_polygons = st.checkbox(
+        "ポリゴンを非表示にする",
+        value=False,
+        help="チェックするとベースマップとポイントのみを表示（高速化/重なり回避用）。"
+    )
 
-    # 粒度に応じて候補リストを決定（←ここから元に戻す）
+    # 粒度に応じた候補
     if granularity == "行政区":
         agg = "adm"
         area_ids = ADM_AREAS
@@ -234,8 +268,12 @@ with st.sidebar:
         agg = "grid1km"
         area_ids = GRID_AREAS
 
-    # シンプルな multiselect（デフォルトは先頭10件）
-    sel = st.multiselect("対象エリア", options=area_ids, default=area_ids[:10])
+    sel = st.multiselect(
+        "対象エリア",
+        options=area_ids,
+        default=area_ids[:10],
+        help="表の右上『ハイライト』と連動。ここに含まれないIDは表に出ません（地図の面塗りは全域）。"
+    )
 
 # ---------- Prediction stub ----------
 @st.cache_data(show_spinner=False)
