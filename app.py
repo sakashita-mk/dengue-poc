@@ -228,19 +228,61 @@ with st.sidebar:
         index=0
     )
 
-    map_style = st.radio(
-        "地図スタイル",
-        ["黒基調", "白基調", "道路地図", "衛星", "衛星+道路"],
-        index=0
+    basemap = st.radio(
+        "地図スタイル（トークン不要）",
+        ["OSM標準", "CARTOライト", "CARTOダーク", "ESRI衛星"], index=2
     )
 
-    style_dict = {
-    "黒基調": "mapbox://styles/mapbox/dark-v9",
-    "白基調": "mapbox://styles/mapbox/light-v9",
-    "道路地図": "mapbox://styles/mapbox/streets-v11",
-    "衛星": "mapbox://styles/mapbox/satellite-v9",
-    "衛星+道路": "mapbox://styles/mapbox/satellite-streets-v11"
+    # タイルURL（必ず帰属表記を入れる）
+    TILES = {
+        "OSM標準": {
+            "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            "attribution": "© OpenStreetMap contributors",
+            "minzoom": 0, "maxzoom": 19,
+        },
+        "CARTOライト": {
+            "url": "https://a.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png",
+            "attribution": "© CARTO © OpenStreetMap contributors",
+            "minzoom": 0, "maxzoom": 19,
+        },
+        "CARTOダーク": {
+            "url": "https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png",
+            "attribution": "© CARTO © OpenStreetMap contributors",
+            "minzoom": 0, "maxzoom": 19,
+        },
+        "ESRI衛星": {
+            "url": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            "attribution": "Source: Esri, Maxar, Earthstar Geographics",
+            "minzoom": 0, "maxzoom": 19,
+        },
     }
+    
+    # 最背面にベースマップ用 TileLayer を追加
+    tile = TILES[basemap]
+    basemap_layer = pdk.Layer(
+        "TileLayer",
+        data={
+            "tilejson": "2.2.0",
+            "tiles": [tile["url"]],
+            "minzoom": tile["minzoom"],
+            "maxzoom": tile["maxzoom"],
+            "attribution": tile["attribution"],
+        },
+        opacity=1.0,
+    )
+    
+    # 既存 layers の先頭に差し込む（背景なので一番下）
+    layers = [basemap_layer] + layers
+    
+    # Deck 側は map_style を無効化
+    st.pydeck_chart(
+        pdk.Deck(
+            layers=layers,
+            initial_view_state=view_state,
+            map_style=None,   # ← CARTOの既定背景を消す
+        ),
+        height=720,
+    )
     
     show_choropleth = st.checkbox("ヒートマップ表示（面を色塗り）", value=True)
     
