@@ -237,7 +237,7 @@ try:
         ))
 
     # 点レイヤ（粒度に関係なく表示）
-    # map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
+     map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
     # 選択行ハイライト対応（次節）
     color_expr = [
         f"(properties.area == '{st.session_state.get('highlight_area','')}')"
