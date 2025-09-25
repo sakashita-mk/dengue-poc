@@ -391,22 +391,7 @@ if show_choropleth:
     st.caption("Heatmap scale: 低← 青 — 黄 — 赤 →高")
 
 st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state), height=720)
-
-
-# ---------- Table ----------
-st.subheader("Predictions")
-table = pred_df[["area","risk_score","risk_level","drivers","horizon_wk","base_week"]]
-
-left, right = st.columns([4,1])
-with left:
-    st.dataframe(table, use_container_width=True, hide_index=True)
-with right:
-    highlight = st.selectbox("ハイライト", options=["(なし)"] + table["area"].tolist())
-    if highlight != "(なし)":
-        st.session_state["highlight_area"] = highlight
-    else:
-        st.session_state["highlight_area"] = ""
-        
+     
 # ---------- Targets ----------
 with st.sidebar:
     st.markdown("---")
