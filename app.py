@@ -253,7 +253,7 @@ def predict_stub(areas, base_day: date, horizon_wk: int, agg_level: str):
         # ★ 空間相関ノイズを加える（地域で“まとまり”が出る）
         spatial = 0.0
         #spatial = (SPATIAL_NOISE_ADM.get(a, 0.0) if agg_level == "adm"
-                   else SPATIAL_NOISE_GRID.get(a, 0.0))
+        #           else SPATIAL_NOISE_GRID.get(a, 0.0))
         # 個別の微小ノイズ（粒度合わせ）
         noise_iid = rng.normal(0, 3)
 
