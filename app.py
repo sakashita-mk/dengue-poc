@@ -22,7 +22,7 @@ def _hash_gdf(gdf: gpd.GeoDataFrame):
 @st.cache_data(
     show_spinner=False,
     hash_funcs={gpd.GeoDataFrame: _hash_gdf}  # ← これがポイント
-
+)
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="NCR Dengue — PoC Demo", layout="wide")
