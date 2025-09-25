@@ -26,6 +26,20 @@ def simplify_gdf(gdf: gpd.GeoDataFrame, tol_m: float = 50) -> gpd.GeoDataFrame:
     g = g.to_crs(4326)
     g["geometry"] = g.buffer(0)            # 念のため修復
     return g
+    
+# 0–100 の score を RGB に変換（青→黄→赤）
+def risk_to_rgb(score: float):
+    s = max(0.0, min(100.0, float(score))) / 100.0
+    # カラーストップ: 0=青(49,130,189) → 0.5=黄(255,237,160) → 1=赤(220,20,60)
+    stops = [(0.0, (49,130,189)), (0.5, (255,237,160)), (1.0, (220,20,60))]
+    for (p0, c0), (p1, c1) in zip(stops, stops[1:]):
+        if s <= p1:
+            t = 0.0 if p1 == p0 else (s - p0) / (p1 - p0)
+            r = int(c0[0] + t * (c1[0] - c0[0]))
+            g = int(c0[1] + t * (c1[1] - c0[1]))
+            b = int(c0[2] + t * (c1[2] - c0[2]))
+            return (r, g, b)
+    return stops[-1][1]
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="NCR Dengue — PoC Demo", layout="wide")
@@ -234,6 +248,9 @@ if not sel:
 
 pred_df = predict_stub(sel, base_date, horizon, agg)
 
+areas_for_map = ADM_AREAS if agg == "adm" else GRID_AREAS
+pred_map = predict_stub(areas_for_map, base_date, horizon, agg)[["area", "risk_score"]]
+
 # 面塗り用：全エリアのスコア（テーブルは sel のままでOK）
 areas_for_map = ADM_AREAS if agg=="adm" else GRID_AREAS
 pred_map = predict_stub(areas_for_map, base_date, horizon, agg)[["area","risk_score"]]
@@ -248,7 +265,6 @@ with right:
     highlight = st.selectbox("ハイライト", options=["(なし)"] + table["area"].tolist(), key="hl")
 highlight_id = "" if highlight == "(なし)" else highlight
 
-# ---------- Map ----------
 # ---------- Map ----------
 st.subheader("Risk Map")
 view_state = pdk.ViewState(latitude=CENTER_LAT, longitude=CENTER_LON, zoom=10)
