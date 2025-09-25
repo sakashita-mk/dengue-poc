@@ -250,94 +250,77 @@ layers = []
 try:
     ncr_gdf, adm2_in_ncr = load_geoboundaries_ncr()
 
-    if not hide_polygons:   # ← サイドバーでチェックされていなければ描画
-    # --- ここから追加：選択エリアのポリゴンをハイライト ---
-    # テーブル側 selectbox の値（既にどこかで highlight_id を作っている前提）
-    # 例: highlight_id = st.session_state.get("highlight_area", "")
-        if highlight_id:
-            if agg == "adm":
-                # 市区名で抽出→統合→描画
-                name_col = [c for c in adm2_in_ncr.columns if "name" in c.lower()][0]
-                h = adm2_in_ncr[adm2_in_ncr[name_col].astype(str) == highlight_id]
-                if not h.empty:
-                    h = h.dissolve(by=name_col)
-                    h = h.explode(index_parts=False).reset_index(drop=True)
-                    h["coordinates"] = h.geometry.apply(to_polygon_coords)
-                    layers.append(pdk.Layer(
-                        "PolygonLayer",
-                        data=h,
-                        get_polygon="coordinates",
-                        get_fill_color=[255, 0, 255, 50],   # うっすらマゼンタ塗り
-                        stroked=True,
-                        get_line_color=[255, 255, 255],    # 太めの白枠
-                        line_width_min_pixels=3,
-                        pickable=False,
-                    ))
-            elif agg == "grid1km":
-                h = grid_cache[grid_cache["grid_id"] == highlight_id].copy()
-                if not h.empty:
-                    h["coordinates"] = h.geometry.apply(to_polygon_coords)
-                    layers.append(pdk.Layer(
-                        "PolygonLayer",
-                        data=h,
-                        get_polygon="coordinates",
-                        get_fill_color=[255, 0, 255, 50],
-                        stroked=True,
-                        get_line_color=[255, 255, 255],
-                        line_width_min_pixels=3,
-                        pickable=False,
-                    ))
-    
-    # 点レイヤ（粒度に関係なく表示）
-    map_df = pred_df[["lat","lon","risk_score","risk_level","area"]].copy()
-    # ベース色（見やすい固定RGB）
-    BASE_COLORS = {
-        "low":  (64, 160, 255),   # 青
-        "med":  (255, 180, 64),   # オレンジ
-        "high": (255, 64, 64),    # 赤
-    }
+    # 行政区モード：行政区ポリゴン（必要なら）を表示
+    if agg == "adm" and not hide_polygons:
+        ncr_gdf["coordinates"] = ncr_gdf.geometry.apply(to_polygon_coords)
+        layers.append(pdk.Layer(
+            "PolygonLayer", data=ncr_gdf, get_polygon="coordinates",
+            get_fill_color=[200,30,0,25], stroked=True, get_line_color=[200,30,0],
+            line_width_min_pixels=1, pickable=False
+        ))
+        if not adm2_in_ncr.empty:
+            adm2_in_ncr["coordinates"] = adm2_in_ncr.geometry.apply(to_polygon_coords)
+            layers.append(pdk.Layer(
+                "PolygonLayer", data=adm2_in_ncr, get_polygon="coordinates",
+                get_fill_color=[0,120,200,12], stroked=True, get_line_color=[0,120,200],
+                line_width_min_pixels=1, pickable=False
+            ))
 
-    # ベクトル化で色・半径・アルファを作成
-    is_hl = (map_df["area"] == highlight_id) & (highlight_id != "")
-    map_df["fill_r"] = np.where(is_hl, 255, map_df["risk_level"].map(lambda lv: BASE_COLORS[lv][0]))
-    map_df["fill_g"] = np.where(is_hl,   0, map_df["risk_level"].map(lambda lv: BASE_COLORS[lv][1]))
-    map_df["fill_b"] = np.where(is_hl, 255, map_df["risk_level"].map(lambda lv: BASE_COLORS[lv][2]))
-    map_df["fill_a"] = np.where(is_hl, 255, 180)  # 透過も強めに差をつける
+    # 1kmグリッドモード：グリッドは常に全面表示（hide_polygonsに関係なく）
+    if agg == "grid1km":
+        grid = grid_cache.copy()
+        grid["coordinates"] = grid.geometry.apply(to_polygon_coords)
+        layers.append(pdk.Layer(
+            "PolygonLayer",
+            data=grid,
+            get_polygon="coordinates",
+            get_fill_color=[0, 0, 0, 0],      # 塗りなし（軽量・見やすい）
+            stroked=True,
+            get_line_color=[255, 255, 0],     # 薄い黄色の枠
+            line_width_min_pixels=1,
+            pickable=False,
+        ))
 
-    map_df["radius"] = np.where(
-        is_hl,
-        1800 if agg == "adm" else 1100,     # ← ハイライトはデカく
-        1200 if agg == "adm" else 700,
-    )
-
-    layers.append(pdk.Layer(
-        "ScatterplotLayer",
-        data=map_df,
-        get_position='[lon, lat]',
-        get_radius="radius",
-        radius_min_pixels=6,
-        radius_max_pixels=30,
-        get_fill_color='[fill_r, fill_g, fill_b, fill_a]',  # ← RGBAで渡す
-        pickable=True,
-        auto_highlight=True,
-    ))
+    # --- 面ハイライト（ADM/GRIDどちらでも） ---
+    if highlight_id:
+        if agg == "adm":
+            name_col = [c for c in adm2_in_ncr.columns if "name" in c.lower()][0]
+            h = adm2_in_ncr[adm2_in_ncr[name_col].astype(str) == highlight_id]
+            if not h.empty:
+                h = h.dissolve(by=name_col).explode(index_parts=False).reset_index(drop=True)
+                h["coordinates"] = h.geometry.apply(to_polygon_coords)
+                layers.append(pdk.Layer(
+                    "PolygonLayer",
+                    data=h,
+                    get_polygon="coordinates",
+                    get_fill_color=[255, 0, 255, 50],   # 半透明マゼンタ
+                    stroked=True,
+                    get_line_color=[255, 255, 255],    # 太白枠
+                    line_width_min_pixels=3,
+                    pickable=False,
+                ))
+        else:  # grid1km
+            h = grid_cache[grid_cache["grid_id"] == highlight_id].copy()
+            if not h.empty:
+                h["coordinates"] = h.geometry.apply(to_polygon_coords)
+                layers.append(pdk.Layer(
+                    "PolygonLayer",
+                    data=h,
+                    get_polygon="coordinates",
+                    get_fill_color=[255, 0, 255, 50],
+                    stroked=True,
+                    get_line_color=[255, 255, 255],
+                    line_width_min_pixels=3,
+                    pickable=False,
+                ))
 
 except Exception as e:
     st.error("ポリゴン描画に失敗しました。詳細ログを下に表示します。")
     st.exception(e)
 
 tooltip = {"text": "{area}\nscore: {risk_score}\nlevel: {risk_level}"}
+st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state, tooltip=tooltip), height=720)
 
-st.pydeck_chart(
-    pdk.Deck(
-        layers=layers,
-        initial_view_state=view_state,
-        tooltip=tooltip          # ← ここを追加
-    ),
-    height=720
-)
-
-st.caption(f"ADM={len(ADM_AREAS)} areas, GRID={len(GRID_AREAS)} cells")
 
 # ---------- Table ----------
 st.subheader("Predictions")
