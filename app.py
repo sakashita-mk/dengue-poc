@@ -22,7 +22,11 @@ CENTER_LAT, CENTER_LON = 14.5995, 120.9842
 # ---------- Helper: geoBoundaries ----------
 @st.cache_data(show_spinner=False)
 def load_geoboundaries_ncr():
-    # ADM1/ADM2 メタデータを取得
+    # ■ GDAL/pyogrio の GeoJSON サイズ上限を引き上げ（MB単位）
+    #   例: 2000MB（十分大きめ）
+    os.environ["OGR_GEOJSON_MAX_OBJ_SIZE"] = "2000"
+
+    # ADM1/ADM2 メタデータを取得（配列で返る）
     adm1_meta = requests.get(
         "https://www.geoboundaries.org/api/current/gbOpen/PHL/ADM1/", timeout=30
     ).json()
@@ -30,12 +34,25 @@ def load_geoboundaries_ncr():
         "https://www.geoboundaries.org/api/current/gbOpen/PHL/ADM2/", timeout=30
     ).json()
 
-    # 辞書なので直接キー参照
-    adm1_url = adm1_meta["gjDownloadURL"]
-    adm2_url = adm2_meta["gjDownloadURL"]
+    # ■ 念のため配列対応：最初の要素から gjDownloadURL を取得
+    def pick_url(meta):
+        if isinstance(meta, list) and len(meta) > 0:
+            m = meta[0]
+        elif isinstance(meta, dict):
+            m = meta
+        else:
+            raise ValueError("geoBoundaries API から想定外のレスポンス")
+        return m["gjDownloadURL"]
 
-    adm1 = gpd.read_file(adm1_url).to_crs(4326)
-    adm2 = gpd.read_file(adm2_url).to_crs(4326)
+    adm1_url = pick_url(adm1_meta)
+    adm2_url = pick_url(adm2_meta)
+
+    # ■ pyogrio にも直接 config_options を渡して上限を拡張
+    read_kwargs = dict(engine="pyogrio",
+                       config_options={"OGR_GEOJSON_MAX_OBJ_SIZE": "2000"})
+
+    adm1 = gpd.read_file(adm1_url, **read_kwargs).to_crs(4326)
+    adm2 = gpd.read_file(adm2_url, **read_kwargs).to_crs(4326)
 
     # 名称カラム推定（geoBoundaries は shapeName が基本）
     name_cols = [c for c in adm1.columns if "name" in c.lower()] or list(adm1.columns)
@@ -50,7 +67,7 @@ def load_geoboundaries_ncr():
     if ncr.empty:
         raise ValueError("NCR を ADM1 から特定できませんでした。")
 
-    # 幾何修復（invalid 対策）＋ explode
+    # 幾何修復＋ explode
     ncr["geometry"] = ncr.buffer(0)
     ncr = ncr.explode(index_parts=False).reset_index(drop=True)
 
